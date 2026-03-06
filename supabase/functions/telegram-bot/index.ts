@@ -1,18 +1,28 @@
 /**
  * ============================================================================
- * LUXURY WORLD (عالم الفخامة) - Telegram Bot Webhook Handler
+ * LUXURY WORLD (عالم الفخامة) - Telegram Bot with FSM Wizard
  * ============================================================================
  * 
- * 24/7 Automated Quotation Generator for Customer Service Team
- * Uses Supabase Edge Functions for webhook-based continuous uptime
+ * Interactive step-by-step quotation wizard using Finite State Machine (FSM)
  * 
- * Features:
- * - Dynamic pricing from central database
- * - 5 offer tiers with View/No-View options
- * - Smart room allocation
- * - One-click copy/forward functionality
+ * AGE-BASED OCCUPANCY RULES:
+ * - Children ≤ 6 years: COMPLETELY FREE (ignored in rooms & car)
+ * - Children > 6 years: Counted as FULL ADULT
+ * - Effective Pax = Adults + (Children > 6)
  * 
- * @version 2.0.0
+ * ROOM ALLOCATION (Strict Mapping):
+ * - 1 Pax = 1 Single (billed at DBL/SGL price)
+ * - 2 Pax = 1 Double
+ * - 3 Pax = 1 Triple
+ * - 4 Pax = 2 Doubles
+ * - 5 Pax = 1 Double + 1 Triple
+ * - 6 Pax = 2 Triples
+ * - Priority: Triple rooms to minimize total rooms
+ * 
+ * DATABASE COLUMNS ORDER:
+ * City | Hotel Name | DBL_SGL_NoView | TRBL_NoView | DBL_SGL_View | TRBL_View
+ * 
+ * @version 3.0.0
  * @date March 6, 2026
  */
 
@@ -25,76 +35,99 @@ const corsHeaders = {
 };
 
 // ============================================================================
-// TYPE DEFINITIONS
+// FSM STATES
 // ============================================================================
 
-interface QuoteRequest {
-  arrivalDate: string;
-  departureDate: string;
-  adults: number;
-  childrenOver6: number;
-  childrenUnder6: number;
+type BotState = 
+  | "IDLE"
+  | "AWAITING_DAYS"
+  | "AWAITING_CITIES"
+  | "AWAITING_ADULTS"
+  | "AWAITING_CHILDREN_COUNT"
+  | "AWAITING_CHILD_AGES"
+  | "PROCESSING";
+
+interface SessionData {
+  days?: number;
+  nights?: number;
+  selectedCities?: string[];
+  adults?: number;
+  totalChildren?: number;
+  childAges?: number[];        // Array of each child's age
+  childrenOver6?: number;      // Auto-calculated from ages
+  childrenUnder6?: number;     // Auto-calculated from ages
+  effectivePax?: number;       // Auto-calculated: adults + childrenOver6
 }
 
+interface Session {
+  chat_id: number;
+  state: BotState;
+  data: SessionData;
+}
+
+// ============================================================================
+// AVAILABLE CITIES
+// ============================================================================
+
+const CITIES = [
+  { id: "Tbilisi", nameAr: "تبليسي", nameEn: "Tbilisi" },
+  { id: "Batumi", nameAr: "باتومي", nameEn: "Batumi" },
+  { id: "Gudauri", nameAr: "غوداوري", nameEn: "Gudauri" },
+  { id: "Borjomi", nameAr: "بورجومي", nameEn: "Borjomi" },
+  { id: "Bakuriani", nameAr: "باكورياني", nameEn: "Bakuriani" },
+  { id: "Kutaisi", nameAr: "كوتايسي", nameEn: "Kutaisi" },
+  { id: "Dashbash", nameAr: "داشباش", nameEn: "Dashbash" },
+];
+
+// ============================================================================
+// SMART ROOM ALLOCATION ENGINE (STRICT MAPPING)
+// ============================================================================
+
 interface RoomAllocation {
-  tripleRooms: number;
-  doubleRooms: number;
   singleRooms: number;
+  doubleRooms: number;
+  tripleRooms: number;
   totalRooms: number;
   effectivePax: number;
 }
 
-interface HotelOffer {
-  city: string;
-  hotelName: string;
-  dblView: number;
-  dblNoView: number;
-  trblView: number;
-  trblNoView: number;
-}
-
-interface CarPricing {
-  minPax: number;
-  maxPax: number;
-  pricePerDay: number;
-}
-
-interface SystemSettings {
-  profitMargin: number;
-  exchangeRateUsdToSar: number;
-  freeSimCardsAllowance: number;
-  simCardPrice: number;
-}
-
-interface CityStay {
-  city: string;
-  nights: number;
-}
-
-// ============================================================================
-// SMART ROOM ALLOCATION ENGINE
-// ============================================================================
-
+/**
+ * Allocates rooms based on Effective Pax using STRICT mapping:
+ * 1 Pax = 1 Single | 2 Pax = 1 Double | 3 Pax = 1 Triple
+ * 4 Pax = 2 Doubles | 5 Pax = 1 Double + 1 Triple | 6 Pax = 2 Triples
+ * Priority: Triple rooms to minimize total rooms
+ */
 function allocateRooms(effectivePax: number): RoomAllocation {
   if (effectivePax <= 0) {
-    return { tripleRooms: 0, doubleRooms: 0, singleRooms: 0, totalRooms: 0, effectivePax: 0 };
+    return { singleRooms: 0, doubleRooms: 0, tripleRooms: 0, totalRooms: 0, effectivePax: 0 };
   }
 
+  // Strict mapping for 1-6 pax
+  const strictMapping: Record<number, RoomAllocation> = {
+    1: { singleRooms: 1, doubleRooms: 0, tripleRooms: 0, totalRooms: 1, effectivePax: 1 },
+    2: { singleRooms: 0, doubleRooms: 1, tripleRooms: 0, totalRooms: 1, effectivePax: 2 },
+    3: { singleRooms: 0, doubleRooms: 0, tripleRooms: 1, totalRooms: 1, effectivePax: 3 },
+    4: { singleRooms: 0, doubleRooms: 2, tripleRooms: 0, totalRooms: 2, effectivePax: 4 },
+    5: { singleRooms: 0, doubleRooms: 1, tripleRooms: 1, totalRooms: 2, effectivePax: 5 },
+    6: { singleRooms: 0, doubleRooms: 0, tripleRooms: 2, totalRooms: 2, effectivePax: 6 },
+  };
+
+  if (effectivePax <= 6) {
+    return strictMapping[effectivePax];
+  }
+
+  // For 7+ pax: prioritize triples to minimize total rooms
   let tripleRooms = Math.floor(effectivePax / 3);
   const remaining = effectivePax % 3;
   let doubleRooms = 0;
   let singleRooms = 0;
 
   switch (remaining) {
-    case 0:
-      break;
+    case 0: break;
     case 1:
-      if (tripleRooms > 0) {
-        tripleRooms--;
-        doubleRooms = 2;
-      } else {
-        singleRooms = 1;
-      }
+      // 1 remaining: convert 1 triple to 2 doubles (3+1=4 = 2x2)
+      if (tripleRooms > 0) { tripleRooms--; doubleRooms = 2; }
+      else { singleRooms = 1; }
       break;
     case 2:
       doubleRooms = 1;
@@ -102,63 +135,40 @@ function allocateRooms(effectivePax: number): RoomAllocation {
   }
 
   return {
-    tripleRooms,
-    doubleRooms,
     singleRooms,
-    totalRooms: tripleRooms + doubleRooms + singleRooms,
+    doubleRooms,
+    tripleRooms,
+    totalRooms: singleRooms + doubleRooms + tripleRooms,
     effectivePax,
   };
 }
 
-// ============================================================================
-// CALCULATION FUNCTIONS
-// ============================================================================
+/**
+ * Calculate Effective Pax from child ages
+ * - Children ≤ 6: FREE (don't count)
+ * - Children > 6: Count as full adult
+ */
+function calculateEffectivePax(adults: number, childAges: number[]): { effectivePax: number; childrenOver6: number; childrenUnder6: number } {
+  let childrenOver6 = 0;
+  let childrenUnder6 = 0;
 
-function daysBetween(d1: string, d2: string): number {
-  const date1 = new Date(d1);
-  const date2 = new Date(d2);
-  return Math.ceil((date2.getTime() - date1.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function getCarDailyRate(totalPax: number, carPricing: CarPricing[]): number {
-  const tier = carPricing.find(c => totalPax >= c.minPax && totalPax <= c.maxPax);
-  if (!tier) {
-    const maxTier = carPricing.reduce((max, c) => c.maxPax > max.maxPax ? c : max, carPricing[0]);
-    return maxTier?.pricePerDay ?? 0;
-  }
-  return tier.pricePerDay;
-}
-
-function calculateHotelCost(
-  cityStays: CityStay[],
-  allocation: RoomAllocation,
-  hotelOffers: HotelOffer[],
-  withView: boolean
-): number {
-  let totalCost = 0;
-  
-  for (const stay of cityStays) {
-    const hotel = hotelOffers.find(h => h.city.toLowerCase() === stay.city.toLowerCase());
-    if (hotel) {
-      const doublePrice = withView ? hotel.dblView : hotel.dblNoView;
-      const triplePrice = withView ? hotel.trblView : hotel.trblNoView;
-      const costPerNight = 
-        (allocation.tripleRooms * triplePrice) + 
-        (allocation.doubleRooms * doublePrice) +
-        (allocation.singleRooms * doublePrice);
-      totalCost += costPerNight * stay.nights;
+  for (const age of childAges) {
+    if (age > 6) {
+      childrenOver6++;
+    } else {
+      childrenUnder6++;
     }
   }
-  
-  return totalCost;
-}
 
-function roundToNearest10(price: number): number {
-  return Math.round(price / 10) * 10;
+  return {
+    effectivePax: adults + childrenOver6,
+    childrenOver6,
+    childrenUnder6,
+  };
 }
 
 // ============================================================================
-// MAIN BOT HANDLER
+// MAIN HANDLER
 // ============================================================================
 
 Deno.serve(async (req) => {
@@ -175,79 +185,311 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
 
-    // Handle Telegram webhook
+    // Handle text messages
     if (body.message) {
       const chatId = body.message.chat.id;
-      const text = body.message.text || "";
+      const text = body.message.text?.trim() || "";
 
-      if (text === "/start") {
-        const welcomeMsg = 
-          `🌟 مرحباً بك في نظام عالم الفخامة - جورجيا 🌟\n\n` +
-          `نظام تسعير آلي يعمل على مدار الساعة 24/7\n\n` +
-          `📝 لطلب عرض سعر، أرسل:\n` +
-          `/quote YYYY-MM-DD YYYY-MM-DD بالغين أطفال_فوق_6 أطفال_تحت_6\n\n` +
-          `📌 مثال:\n` +
-          `/quote 2026-07-01 2026-07-08 2 1 1\n\n` +
-          `سيتم حساب:\n` +
-          `• 5 عروض فندقية (مع وبدون إطلالة)\n` +
-          `• توزيع الغرف الذكي تلقائياً\n` +
-          `• عرض سيارة فقط\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `💎 عالم الفخامة - Luxury World`;
+      // Get or create session
+      let session = await getSession(supabase, chatId);
 
-        await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, welcomeMsg);
+      // Handle /start command - reset and begin wizard
+      if (text === "/start" || text === "/quote") {
+        session = await resetSession(supabase, chatId);
+        await sendDaysPrompt(TELEGRAM_BOT_TOKEN!, chatId);
+        await updateSession(supabase, chatId, "AWAITING_DAYS", {});
         return new Response("OK", { headers: corsHeaders });
       }
 
-      if (text.startsWith("/quote")) {
-        const parts = text.split(" ").slice(1);
-        if (parts.length < 5) {
-          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId,
-            `❌ صيغة غير صحيحة\n\n` +
-            `الصيغة الصحيحة:\n` +
-            `/quote تاريخ_وصول تاريخ_مغادرة بالغين أطفال_فوق_6 أطفال_تحت_6\n\n` +
-            `مثال:\n` +
-            `/quote 2026-07-01 2026-07-08 2 1 0`
+      // Handle /cancel command
+      if (text === "/cancel") {
+        await resetSession(supabase, chatId);
+        await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, "❌ تم إلغاء العملية.\n\nأرسل /start لبدء عرض سعر جديد.");
+        return new Response("OK", { headers: corsHeaders });
+      }
+
+      // Process based on current state
+      switch (session.state) {
+        case "IDLE":
+          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+            "🌟 مرحباً بك في نظام عالم الفخامة 🌟\n\nأرسل /start لبدء عرض سعر جديد."
           );
-          return new Response("OK", { headers: corsHeaders });
-        }
+          break;
 
-        const request: QuoteRequest = {
-          arrivalDate: parts[0],
-          departureDate: parts[1],
-          adults: parseInt(parts[2]) || 0,
-          childrenOver6: parseInt(parts[3]) || 0,
-          childrenUnder6: parseInt(parts[4]) || 0,
-        };
+        case "AWAITING_DAYS":
+          const days = parseInt(text);
+          if (isNaN(days) || days < 1 || days > 30) {
+            await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+              "⚠️ يرجى إدخال رقم صحيح بين 1 و 30 يوماً."
+            );
+          } else {
+            session.data.days = days;
+            session.data.nights = days;
+            await updateSession(supabase, chatId, "AWAITING_CITIES", session.data);
+            await sendCitiesSelection(TELEGRAM_BOT_TOKEN!, chatId, days, []);
+          }
+          break;
 
-        // Generate quotation
-        const quoteMessage = await generateQuotation(supabase, request);
-        
-        // Send with inline keyboard for copy/forward
-        await sendTelegramWithKeyboard(TELEGRAM_BOT_TOKEN!, chatId, quoteMessage);
-        
-        return new Response("OK", { headers: corsHeaders });
+        case "AWAITING_ADULTS":
+          const adults = parseInt(text);
+          if (isNaN(adults) || adults < 1 || adults > 50) {
+            await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+              "⚠️ يرجى إدخال عدد صحيح للبالغين (1-50)."
+            );
+          } else {
+            session.data.adults = adults;
+            await updateSession(supabase, chatId, "AWAITING_CHILDREN_COUNT", session.data);
+            await sendChildrenCountPrompt(TELEGRAM_BOT_TOKEN!, chatId);
+          }
+          break;
+
+        case "AWAITING_CHILDREN_COUNT":
+          const childCount = parseInt(text);
+          if (isNaN(childCount) || childCount < 0 || childCount > 20) {
+            await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+              "⚠️ يرجى إدخال عدد صحيح (0-20)."
+            );
+          } else if (childCount === 0) {
+            // No children - proceed to processing
+            session.data.totalChildren = 0;
+            session.data.childAges = [];
+            session.data.childrenOver6 = 0;
+            session.data.childrenUnder6 = 0;
+            session.data.effectivePax = session.data.adults;
+            await updateSession(supabase, chatId, "PROCESSING", session.data);
+            
+            await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, "⏳ جاري حساب العروض...");
+            const quote = await generateQuotation(supabase, session.data);
+            await sendTelegramWithKeyboard(TELEGRAM_BOT_TOKEN!, chatId, quote);
+            await resetSession(supabase, chatId);
+          } else {
+            // Has children - ask for ages
+            session.data.totalChildren = childCount;
+            session.data.childAges = [];
+            await updateSession(supabase, chatId, "AWAITING_CHILD_AGES", session.data);
+            await sendChildAgePrompt(TELEGRAM_BOT_TOKEN!, chatId, 1, childCount);
+          }
+          break;
+
+        case "AWAITING_CHILD_AGES":
+          const age = parseInt(text);
+          if (isNaN(age) || age < 0 || age > 17) {
+            await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+              "⚠️ يرجى إدخال عمر صحيح (0-17 سنة)."
+            );
+          } else {
+            const childAges = session.data.childAges || [];
+            childAges.push(age);
+            session.data.childAges = childAges;
+
+            const totalChildren = session.data.totalChildren || 0;
+            const collectedCount = childAges.length;
+
+            if (collectedCount < totalChildren) {
+              // Ask for next child's age
+              await updateSession(supabase, chatId, "AWAITING_CHILD_AGES", session.data);
+              await sendChildAgePrompt(TELEGRAM_BOT_TOKEN!, chatId, collectedCount + 1, totalChildren);
+            } else {
+              // All ages collected - calculate effective pax
+              const { effectivePax, childrenOver6, childrenUnder6 } = calculateEffectivePax(
+                session.data.adults!,
+                childAges
+              );
+              
+              session.data.effectivePax = effectivePax;
+              session.data.childrenOver6 = childrenOver6;
+              session.data.childrenUnder6 = childrenUnder6;
+              
+              await updateSession(supabase, chatId, "PROCESSING", session.data);
+
+              // Show age summary
+              const ageSummary = childrenUnder6 > 0 
+                ? `\n📌 ملاحظة: ${childrenUnder6} طفل (6 سنوات أو أقل) = مجاناً`
+                : "";
+              
+              await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+                `✅ تم تسجيل أعمار الأطفال\n` +
+                `• أطفال فوق 6 سنوات: ${childrenOver6} (يُحسبون كبالغين)\n` +
+                `• أطفال 6 سنوات أو أقل: ${childrenUnder6} (مجاناً)${ageSummary}\n` +
+                `• العدد الفعلي للحساب: ${effectivePax} شخص\n\n` +
+                `⏳ جاري حساب العروض...`
+              );
+              
+              const quote = await generateQuotation(supabase, session.data);
+              await sendTelegramWithKeyboard(TELEGRAM_BOT_TOKEN!, chatId, quote);
+              await resetSession(supabase, chatId);
+            }
+          }
+          break;
+
+        case "AWAITING_CITIES":
+          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+            "⚠️ يرجى اختيار المدن من الأزرار أدناه، ثم اضغط 'تأكيد ✅'"
+          );
+          break;
+
+        default:
+          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+            "أرسل /start لبدء عرض سعر جديد."
+          );
       }
 
-      // Handle callback queries (button presses)
-      await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
-        `أرسل /start للبدء أو /quote لطلب عرض سعر`
-      );
       return new Response("OK", { headers: corsHeaders });
     }
 
-    // Handle callback query (inline button press)
+    // Handle callback queries (button presses)
     if (body.callback_query) {
-      const callbackQuery = body.callback_query;
-      const data = callbackQuery.data;
-      
-      if (data === "copy_quote") {
-        // Answer callback to remove loading state
-        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callbackQuery.id, 
-          "تم! يمكنك الآن إعادة توجيه الرسالة للعميل"
-        );
+      const callback = body.callback_query;
+      const chatId = callback.message.chat.id;
+      const messageId = callback.message.message_id;
+      const data = callback.data;
+
+      let session = await getSession(supabase, chatId);
+
+      // Days selection from buttons
+      if (data.startsWith("days_")) {
+        const daysStr = data.replace("days_", "");
+        if (daysStr === "custom") {
+          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, "✏️ أدخل عدد الأيام:");
+          await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "");
+        } else {
+          const days = parseInt(daysStr);
+          session.data.days = days;
+          session.data.nights = days;
+          await updateSession(supabase, chatId, "AWAITING_CITIES", session.data);
+          await sendCitiesSelection(TELEGRAM_BOT_TOKEN!, chatId, days, []);
+          await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, `✅ ${days} أيام`);
+        }
+      }
+
+      // City selection handling
+      else if (data.startsWith("city_")) {
+        const cityId = data.replace("city_", "");
+        const selectedCities = session.data.selectedCities || [];
+        
+        if (selectedCities.includes(cityId)) {
+          session.data.selectedCities = selectedCities.filter(c => c !== cityId);
+        } else {
+          session.data.selectedCities = [...selectedCities, cityId];
+        }
+        
+        await updateSession(supabase, chatId, "AWAITING_CITIES", session.data);
+        await updateCitiesSelection(TELEGRAM_BOT_TOKEN!, chatId, messageId, session.data.days!, session.data.selectedCities);
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "");
       }
       
+      // Confirm cities selection
+      else if (data === "confirm_cities") {
+        const selectedCities = session.data.selectedCities || [];
+        
+        if (selectedCities.length === 0) {
+          await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "⚠️ يرجى اختيار مدينة واحدة على الأقل");
+        } else {
+          await updateSession(supabase, chatId, "AWAITING_ADULTS", session.data);
+          await sendAdultsPrompt(TELEGRAM_BOT_TOKEN!, chatId, selectedCities);
+          await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "✅ تم تأكيد المدن");
+        }
+      }
+      
+      // Auto-suggest route based on days
+      else if (data === "auto_route") {
+        const suggestedCities = getSuggestedRoute(session.data.days!);
+        session.data.selectedCities = suggestedCities;
+        await updateSession(supabase, chatId, "AWAITING_ADULTS", session.data);
+        await sendAdultsPrompt(TELEGRAM_BOT_TOKEN!, chatId, suggestedCities);
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "✅ تم اختيار المسار المقترح");
+      }
+      
+      // Quick number buttons for adults
+      else if (data.startsWith("adults_")) {
+        const num = parseInt(data.replace("adults_", ""));
+        session.data.adults = num;
+        await updateSession(supabase, chatId, "AWAITING_CHILDREN_COUNT", session.data);
+        await sendChildrenCountPrompt(TELEGRAM_BOT_TOKEN!, chatId);
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "");
+      }
+      
+      // Children count from buttons
+      else if (data.startsWith("children_")) {
+        const num = parseInt(data.replace("children_", ""));
+        if (num === 0) {
+          // No children - proceed directly
+          session.data.totalChildren = 0;
+          session.data.childAges = [];
+          session.data.childrenOver6 = 0;
+          session.data.childrenUnder6 = 0;
+          session.data.effectivePax = session.data.adults;
+          await updateSession(supabase, chatId, "PROCESSING", session.data);
+          
+          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, "⏳ جاري حساب العروض...");
+          const quote = await generateQuotation(supabase, session.data);
+          await sendTelegramWithKeyboard(TELEGRAM_BOT_TOKEN!, chatId, quote);
+          await resetSession(supabase, chatId);
+        } else {
+          session.data.totalChildren = num;
+          session.data.childAges = [];
+          await updateSession(supabase, chatId, "AWAITING_CHILD_AGES", session.data);
+          await sendChildAgePrompt(TELEGRAM_BOT_TOKEN!, chatId, 1, num);
+        }
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "");
+      }
+      
+      // Child age from buttons
+      else if (data.startsWith("age_")) {
+        const age = parseInt(data.replace("age_", ""));
+        const childAges = session.data.childAges || [];
+        childAges.push(age);
+        session.data.childAges = childAges;
+
+        const totalChildren = session.data.totalChildren || 0;
+        const collectedCount = childAges.length;
+
+        if (collectedCount < totalChildren) {
+          await updateSession(supabase, chatId, "AWAITING_CHILD_AGES", session.data);
+          await sendChildAgePrompt(TELEGRAM_BOT_TOKEN!, chatId, collectedCount + 1, totalChildren);
+        } else {
+          // All ages collected
+          const { effectivePax, childrenOver6, childrenUnder6 } = calculateEffectivePax(
+            session.data.adults!,
+            childAges
+          );
+          
+          session.data.effectivePax = effectivePax;
+          session.data.childrenOver6 = childrenOver6;
+          session.data.childrenUnder6 = childrenUnder6;
+          
+          await updateSession(supabase, chatId, "PROCESSING", session.data);
+
+          const ageSummary = childrenUnder6 > 0 
+            ? `\n📌 ${childrenUnder6} طفل (≤6 سنوات) = مجاناً`
+            : "";
+          
+          await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+            `✅ تم تسجيل الأعمار\n` +
+            `• العدد الفعلي: ${effectivePax} شخص${ageSummary}\n\n` +
+            `⏳ جاري حساب العروض...`
+          );
+          
+          const quote = await generateQuotation(supabase, session.data);
+          await sendTelegramWithKeyboard(TELEGRAM_BOT_TOKEN!, chatId, quote);
+          await resetSession(supabase, chatId);
+        }
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "");
+      }
+      
+      // New quote
+      else if (data === "new_quote") {
+        await resetSession(supabase, chatId);
+        await sendDaysPrompt(TELEGRAM_BOT_TOKEN!, chatId);
+        await updateSession(supabase, chatId, "AWAITING_DAYS", {});
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "🔄 بدء عرض جديد");
+      }
+      
+      // Forward quote
+      else if (data === "forward_quote") {
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callback.id, "↗️ قم بإعادة توجيه الرسالة أعلاه للعميل");
+      }
+
       return new Response("OK", { headers: corsHeaders });
     }
 
@@ -262,16 +504,299 @@ Deno.serve(async (req) => {
 });
 
 // ============================================================================
+// SESSION MANAGEMENT
+// ============================================================================
+
+async function getSession(supabase: any, chatId: number): Promise<Session> {
+  const { data } = await supabase
+    .from("bot_sessions")
+    .select("*")
+    .eq("chat_id", chatId)
+    .single();
+
+  if (data) {
+    return { chat_id: chatId, state: data.state as BotState, data: data.data || {} };
+  }
+
+  await supabase.from("bot_sessions").insert({ chat_id: chatId, state: "IDLE", data: {} });
+  return { chat_id: chatId, state: "IDLE", data: {} };
+}
+
+async function updateSession(supabase: any, chatId: number, state: BotState, data: SessionData): Promise<void> {
+  await supabase
+    .from("bot_sessions")
+    .upsert({ chat_id: chatId, state, data, updated_at: new Date().toISOString() }, { onConflict: "chat_id" });
+}
+
+async function resetSession(supabase: any, chatId: number): Promise<Session> {
+  await supabase
+    .from("bot_sessions")
+    .upsert({ chat_id: chatId, state: "IDLE", data: {}, updated_at: new Date().toISOString() }, { onConflict: "chat_id" });
+  return { chat_id: chatId, state: "IDLE", data: {} };
+}
+
+// ============================================================================
+// WIZARD STEP PROMPTS
+// ============================================================================
+
+async function sendDaysPrompt(token: string, chatId: number) {
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "5 أيام", callback_data: "days_5" },
+        { text: "7 أيام", callback_data: "days_7" },
+        { text: "10 أيام", callback_data: "days_10" },
+      ],
+      [
+        { text: "14 يوم", callback_data: "days_14" },
+        { text: "أخرى ⌨️", callback_data: "days_custom" },
+      ],
+    ],
+  };
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: "🌟 *معالج عروض الأسعار - عالم الفخامة* 🌟\n\n" +
+            "━━━━━━━━━━━━━━━━━━━━\n" +
+            "📅 *الخطوة 1/4*: كم عدد أيام الرحلة؟\n" +
+            "━━━━━━━━━━━━━━━━━━━━\n\n" +
+            "اختر من الأزرار أو اكتب الرقم مباشرة:",
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    }),
+  });
+}
+
+async function sendCitiesSelection(token: string, chatId: number, days: number, selected: string[]) {
+  const cityButtons = CITIES.map(city => ({
+    text: selected.includes(city.id) ? `✅ ${city.nameAr}` : city.nameAr,
+    callback_data: `city_${city.id}`,
+  }));
+
+  const rows: any[][] = [];
+  for (let i = 0; i < cityButtons.length; i += 2) {
+    rows.push(cityButtons.slice(i, i + 2));
+  }
+
+  rows.push([{ text: "🗺️ مسار مقترح تلقائي", callback_data: "auto_route" }]);
+  rows.push([{ text: "تأكيد ✅", callback_data: "confirm_cities" }]);
+
+  const keyboard = { inline_keyboard: rows };
+  const selectedText = selected.length > 0 
+    ? `المدن المختارة: ${selected.map(c => CITIES.find(x => x.id === c)?.nameAr).join("، ")}`
+    : "لم يتم اختيار أي مدينة بعد";
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🏙️ *الخطوة 2/4*: اختر المدن المطلوبة\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `مدة الرحلة: *${days} أيام*\n\n` +
+            `${selectedText}\n\n` +
+            `اضغط على المدن لإضافتها/إزالتها:`,
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    }),
+  });
+}
+
+async function updateCitiesSelection(token: string, chatId: number, messageId: number, days: number, selected: string[]) {
+  const cityButtons = CITIES.map(city => ({
+    text: selected.includes(city.id) ? `✅ ${city.nameAr}` : city.nameAr,
+    callback_data: `city_${city.id}`,
+  }));
+
+  const rows: any[][] = [];
+  for (let i = 0; i < cityButtons.length; i += 2) {
+    rows.push(cityButtons.slice(i, i + 2));
+  }
+
+  rows.push([{ text: "🗺️ مسار مقترح تلقائي", callback_data: "auto_route" }]);
+  rows.push([{ text: "تأكيد ✅", callback_data: "confirm_cities" }]);
+
+  const keyboard = { inline_keyboard: rows };
+  const selectedText = selected.length > 0 
+    ? `المدن المختارة: ${selected.map(c => CITIES.find(x => x.id === c)?.nameAr).join("، ")}`
+    : "لم يتم اختيار أي مدينة بعد";
+
+  await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text: `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🏙️ *الخطوة 2/4*: اختر المدن المطلوبة\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `مدة الرحلة: *${days} أيام*\n\n` +
+            `${selectedText}\n\n` +
+            `اضغط على المدن لإضافتها/إزالتها:`,
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    }),
+  });
+}
+
+async function sendAdultsPrompt(token: string, chatId: number, selectedCities: string[]) {
+  const citiesText = selectedCities.map(c => CITIES.find(x => x.id === c)?.nameAr).join(" → ");
+  
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "1", callback_data: "adults_1" },
+        { text: "2", callback_data: "adults_2" },
+        { text: "3", callback_data: "adults_3" },
+        { text: "4", callback_data: "adults_4" },
+      ],
+      [
+        { text: "5", callback_data: "adults_5" },
+        { text: "6", callback_data: "adults_6" },
+        { text: "8", callback_data: "adults_8" },
+        { text: "10", callback_data: "adults_10" },
+      ],
+    ],
+  };
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `━━━━━━━━━━━━━━━━━━━━\n` +
+            `👥 *الخطوة 3/4*: كم عدد البالغين؟\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `المسار: *${citiesText}*\n\n` +
+            `اختر من الأزرار أو اكتب الرقم:`,
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    }),
+  });
+}
+
+async function sendChildrenCountPrompt(token: string, chatId: number) {
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "0 (لا يوجد)", callback_data: "children_0" },
+        { text: "1", callback_data: "children_1" },
+        { text: "2", callback_data: "children_2" },
+      ],
+      [
+        { text: "3", callback_data: "children_3" },
+        { text: "4", callback_data: "children_4" },
+        { text: "5+", callback_data: "children_5" },
+      ],
+    ],
+  };
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `━━━━━━━━━━━━━━━━━━━━\n` +
+            `👶 *الخطوة 4/4*: كم عدد الأطفال؟\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n\n` +
+            `📌 *سياسة الأعمار:*\n` +
+            `• الأطفال 6 سنوات أو أقل = *مجاناً*\n` +
+            `• الأطفال فوق 6 سنوات = يُحسبون كبالغين\n\n` +
+            `اختر العدد الإجمالي للأطفال:`,
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    }),
+  });
+}
+
+async function sendChildAgePrompt(token: string, chatId: number, childNumber: number, totalChildren: number) {
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: "1 سنة", callback_data: "age_1" },
+        { text: "2", callback_data: "age_2" },
+        { text: "3", callback_data: "age_3" },
+        { text: "4", callback_data: "age_4" },
+      ],
+      [
+        { text: "5", callback_data: "age_5" },
+        { text: "6", callback_data: "age_6" },
+        { text: "7", callback_data: "age_7" },
+        { text: "8", callback_data: "age_8" },
+      ],
+      [
+        { text: "9", callback_data: "age_9" },
+        { text: "10", callback_data: "age_10" },
+        { text: "11", callback_data: "age_11" },
+        { text: "12+", callback_data: "age_12" },
+      ],
+    ],
+  };
+
+  const ageEmoji = childNumber === 1 ? "👶" : childNumber === 2 ? "👧" : "👦";
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: `${ageEmoji} *عمر الطفل ${childNumber} من ${totalChildren}:*\n\n` +
+            `اختر العمر أو اكتبه:`,
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    }),
+  });
+}
+
+// ============================================================================
+// SUGGESTED ROUTE BASED ON DAYS
+// ============================================================================
+
+function getSuggestedRoute(days: number): string[] {
+  if (days <= 3) return ["Tbilisi"];
+  if (days <= 5) return ["Tbilisi", "Batumi"];
+  if (days <= 7) return ["Tbilisi", "Gudauri", "Batumi"];
+  if (days <= 10) return ["Tbilisi", "Gudauri", "Borjomi", "Batumi"];
+  return ["Tbilisi", "Gudauri", "Borjomi", "Bakuriani", "Batumi"];
+}
+
+function getCityDistribution(days: number, selectedCities: string[]): { city: string; nights: number }[] {
+  const totalNights = days;
+  const cityCount = selectedCities.length;
+  
+  if (cityCount === 0) return [];
+  if (cityCount === 1) return [{ city: selectedCities[0], nights: totalNights }];
+
+  const baseNights = Math.floor(totalNights / cityCount);
+  const extraNights = totalNights % cityCount;
+
+  return selectedCities.map((city, i) => ({
+    city,
+    nights: baseNights + (i < extraNights ? 1 : 0),
+  }));
+}
+
+// ============================================================================
 // QUOTATION GENERATOR
 // ============================================================================
 
-async function generateQuotation(supabase: any, req: QuoteRequest): Promise<string> {
-  const totalDays = daysBetween(req.arrivalDate, req.departureDate);
-  const totalNights = totalDays;
-  const effectivePax = req.adults + req.childrenOver6;
-  const totalPax = req.adults + req.childrenOver6 + req.childrenUnder6;
+async function generateQuotation(supabase: any, data: SessionData): Promise<string> {
+  const days = data.days!;
+  const nights = days;
+  const adults = data.adults!;
+  const childrenOver6 = data.childrenOver6 || 0;
+  const childrenUnder6 = data.childrenUnder6 || 0;
+  const selectedCities = data.selectedCities || ["Tbilisi", "Batumi"];
 
-  // Fetch all dynamic data from database
+  // Effective Pax = Adults + Children > 6 (children ≤6 are FREE)
+  const effectivePax = data.effectivePax || (adults + childrenOver6);
+  const totalChildren = childrenOver6 + childrenUnder6;
+
+  // Fetch all dynamic data
   const [settingsRes, servicesRes, carPricingRes, tier1Res, tier2Res, tier3Res, tier4Res, tier5Res] = 
     await Promise.all([
       supabase.from("system_settings").select("*").single(),
@@ -284,120 +809,113 @@ async function generateQuotation(supabase: any, req: QuoteRequest): Promise<stri
       supabase.from("hotel_offers").select("*").eq("offer_tier", "tier_5").eq("is_active", true),
     ]);
 
-  const settings: SystemSettings = {
-    profitMargin: settingsRes.data?.profit_margin ?? 22,
-    exchangeRateUsdToSar: settingsRes.data?.exchange_rate_usd_to_sar ?? 3.8,
-    freeSimCardsAllowance: settingsRes.data?.free_sim_cards_allowance ?? 2,
-    simCardPrice: servicesRes.data?.sim_card_price ?? 15,
-  };
+  const profitMargin = settingsRes.data?.profit_margin ?? 22;
+  const exchangeRate = settingsRes.data?.exchange_rate_usd_to_sar ?? 3.8;
+  const freeSimCards = settingsRes.data?.free_sim_cards_allowance ?? 2;
+  const simCardPrice = servicesRes.data?.sim_card_price ?? 15;
 
-  const carPricing: CarPricing[] = (carPricingRes.data || []).map((c: any) => ({
-    minPax: c.min_pax,
-    maxPax: c.max_pax,
-    pricePerDay: c.price_per_day,
-  }));
+  const carPricing = carPricingRes.data || [];
+  const tierOffers = [tier1Res.data || [], tier2Res.data || [], tier3Res.data || [], tier4Res.data || [], tier5Res.data || []];
 
-  const tierOffers: HotelOffer[][] = [
-    tier1Res.data || [],
-    tier2Res.data || [],
-    tier3Res.data || [],
-    tier4Res.data || [],
-    tier5Res.data || [],
-  ].map(tierData => tierData.map((h: any) => ({
-    city: h.city,
-    hotelName: h.hotel_name,
-    dblView: h.dbl_view,
-    dblNoView: h.dbl_no_view,
-    trblView: h.trbl_view,
-    trblNoView: h.trbl_no_view,
-  })));
-
-  // Smart room allocation
+  // Smart room allocation based on Effective Pax
   const allocation = allocateRooms(effectivePax);
 
-  // Format room configuration text
+  // Room config text
   let roomConfigText = "";
   if (allocation.tripleRooms > 0) roomConfigText += `${allocation.tripleRooms} ثلاثية`;
   if (allocation.doubleRooms > 0) roomConfigText += (roomConfigText ? " + " : "") + `${allocation.doubleRooms} مزدوجة`;
   if (allocation.singleRooms > 0) roomConfigText += (roomConfigText ? " + " : "") + `${allocation.singleRooms} مفردة`;
-  if (!roomConfigText) roomConfigText = "لا يوجد";
+  if (!roomConfigText) roomConfigText = "غرفة واحدة";
 
-  // City distribution (default for Georgia trip)
-  const cityStays: CityStay[] = getCityDistribution(totalNights);
+  // City distribution
+  const cityStays = getCityDistribution(nights, selectedCities);
 
-  // Calculate car cost
-  const carDailyRate = getCarDailyRate(totalPax, carPricing);
-  const carCost = carDailyRate * totalDays;
+  // Car rate based on Effective Pax (children ≤6 don't count for car)
+  const carTier = carPricing.find((c: any) => effectivePax >= c.min_pax && effectivePax <= c.max_pax);
+  const carDailyRate = carTier?.price_per_day ?? carPricing[carPricing.length - 1]?.price_per_day ?? 100;
+  const carCost = carDailyRate * days;
 
-  // Calculate SIM card cost
-  const simCost = totalPax > settings.freeSimCardsAllowance 
-    ? (totalPax - settings.freeSimCardsAllowance) * settings.simCardPrice 
-    : 0;
+  // SIM cost (only for adults + children > 6)
+  const simCost = effectivePax > freeSimCards ? (effectivePax - freeSimCards) * simCardPrice : 0;
 
-  // Offer tier labels
-  const tierLabels = [
-    "💎 العرض الأول (اقتصادي مميز)",
-    "💎 العرض الثاني (ستاندرد)",
-    "💎 العرض الثالث (متوسط)",
-    "💎 العرض الرابع (ديلوكس)",
-    "💎 العرض الخامس (فاخر جداً)",
-  ];
+  // Tier labels
+  const tierLabels = ["💎 العرض الأول (اقتصادي مميز)", "💎 العرض الثاني (ستاندرد)", "💎 العرض الثالث (متوسط)", "💎 العرض الرابع (ديلوكس)", "💎 العرض الخامس (فاخر جداً)"];
 
   // Generate offers
   const offerBlocks: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const hotelOffers = tierOffers[i];
+    const hotels = tierOffers[i];
     
-    // Calculate hotel costs for both view options
-    const hotelCostNoView = calculateHotelCost(cityStays, allocation, hotelOffers, false);
-    const hotelCostWithView = calculateHotelCost(cityStays, allocation, hotelOffers, true);
+    let hotelCostNoView = 0;
+    let hotelCostWithView = 0;
+    const hotelList: string[] = [];
 
-    // Initial costs
-    const initialCostNoView = hotelCostNoView + carCost + simCost;
-    const initialCostWithView = hotelCostWithView + carCost + simCost;
+    for (const stay of cityStays) {
+      const hotel = hotels.find((h: any) => h.city.toLowerCase() === stay.city.toLowerCase());
+      const cityNameAr = CITIES.find(c => c.id === stay.city)?.nameAr || stay.city;
+      
+      if (hotel) {
+        // DATABASE COLUMNS: DBL_SGL_NoView | TRBL_NoView | DBL_SGL_View | TRBL_View
+        // Single = Double price (DBL_SGL)
+        const dblSglNoView = hotel.dbl_no_view;  // DBL_SGL_NoView
+        const trblNoView = hotel.trbl_no_view;   // TRBL_NoView
+        const dblSglView = hotel.dbl_view;       // DBL_SGL_View
+        const trblView = hotel.trbl_view;        // TRBL_View
 
-    // Apply profit margin
-    const withProfitNoView = initialCostNoView * (1 + settings.profitMargin / 100);
-    const withProfitWithView = initialCostWithView * (1 + settings.profitMargin / 100);
+        // Calculate nightly costs based on room allocation
+        // Single rooms use DBL_SGL price
+        const nightCostNoView = 
+          (allocation.tripleRooms * trblNoView) + 
+          (allocation.doubleRooms * dblSglNoView) + 
+          (allocation.singleRooms * dblSglNoView);  // Single = DBL price
+          
+        const nightCostWithView = 
+          (allocation.tripleRooms * trblView) + 
+          (allocation.doubleRooms * dblSglView) + 
+          (allocation.singleRooms * dblSglView);    // Single = DBL price
 
-    // Convert to SAR and round
-    const finalPriceNoView = roundToNearest10(withProfitNoView * settings.exchangeRateUsdToSar);
-    const finalPriceWithView = roundToNearest10(withProfitWithView * settings.exchangeRateUsdToSar);
+        hotelCostNoView += nightCostNoView * stay.nights;
+        hotelCostWithView += nightCostWithView * stay.nights;
+        hotelList.push(`• ${cityNameAr} (${stay.nights} ليالي): ${hotel.hotel_name}`);
+      } else {
+        hotelList.push(`• ${cityNameAr} (${stay.nights} ليالي): فندق محلي مميز`);
+      }
+    }
 
-    // Format USD prices for display
-    const usdNoView = roundToNearest10(withProfitNoView);
-    const usdWithView = roundToNearest10(withProfitWithView);
+    const initialNoView = hotelCostNoView + carCost + simCost;
+    const initialWithView = hotelCostWithView + carCost + simCost;
 
-    // Build hotel list
-    const hotelList = cityStays.map(stay => {
-      const hotel = hotelOffers.find(h => h.city.toLowerCase() === stay.city.toLowerCase());
-      const cityNameAr = getCityNameArabic(stay.city);
-      return `• ${cityNameAr} (${stay.nights} ليالي): ${hotel?.hotelName || "فندق محلي مميز"}`;
-    }).join("\n");
+    const withProfitNoView = initialNoView * (1 + profitMargin / 100);
+    const withProfitWithView = initialWithView * (1 + profitMargin / 100);
+
+    const finalNoView = Math.round(withProfitNoView * exchangeRate / 10) * 10;
+    const finalWithView = Math.round(withProfitWithView * exchangeRate / 10) * 10;
+
+    const usdNoView = Math.round(withProfitNoView / 10) * 10;
+    const usdWithView = Math.round(withProfitWithView / 10) * 10;
 
     offerBlocks.push(
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `${tierLabels[i]}:\n` +
-      `💵 السعر بدون إطلالة: ${finalPriceNoView} ر.س ($${usdNoView})\n` +
-      `🖼️ السعر مع إطلالة: ${finalPriceWithView} ر.س ($${usdWithView})\n` +
+      `💵 السعر بدون إطلالة: ${finalNoView.toLocaleString()} ر.س ($${usdNoView})\n` +
+      `🖼️ السعر مع إطلالة: ${finalWithView.toLocaleString()} ر.س ($${usdWithView})\n` +
       `🏨 الفنادق وتوزيع الليالي:\n` +
-      hotelList
+      hotelList.join("\n")
     );
   }
 
   // Car only offer
   const carOnlyInitial = carCost + simCost;
-  const carOnlyWithProfit = carOnlyInitial * (1 + settings.profitMargin / 100);
-  const carOnlyFinal = roundToNearest10(carOnlyWithProfit * settings.exchangeRateUsdToSar);
-  const carOnlyUsd = roundToNearest10(carOnlyWithProfit);
+  const carOnlyWithProfit = carOnlyInitial * (1 + profitMargin / 100);
+  const carOnlyFinal = Math.round(carOnlyWithProfit * exchangeRate / 10) * 10;
+  const carOnlyUsd = Math.round(carOnlyWithProfit / 10) * 10;
 
   const carOnlyBlock = 
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🚗 عرض سيارة فقط (بدون إقامة): ${carOnlyFinal} ر.س ($${carOnlyUsd})\n` +
-    `يشمل: سيارة مع سائق لمدة ${totalDays} أيام، خطوط اتصال، وتأمين شامل.`;
+    `🚗 عرض سيارة فقط (بدون إقامة): ${carOnlyFinal.toLocaleString()} ر.س ($${carOnlyUsd})\n` +
+    `يشمل: سيارة مع سائق لمدة ${days} أيام، خطوط اتصال، وتأمين شامل.`;
 
-  // Included services
   const servicesBlock = 
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `✅ الخدمات المشمولة في العروض الفندقية:\n` +
@@ -408,70 +926,29 @@ async function generateQuotation(supabase: any, req: QuoteRequest): Promise<stri
     `• تأمين سفر شامل.`;
 
   // Build final message
-  const childrenTotal = req.childrenOver6 + req.childrenUnder6;
-  
-  const message = 
+  const routeText = cityStays.map(s => CITIES.find(c => c.id === s.city)?.nameAr || s.city).join(" → ");
+
+  // Age breakdown display
+  let childrenDisplay = "";
+  if (totalChildren > 0) {
+    childrenDisplay = `| الأطفال: ${totalChildren}`;
+    if (childrenUnder6 > 0) {
+      childrenDisplay += ` (${childrenUnder6} مجاناً)`;
+    }
+  }
+
+  return (
     `🌟 عروض عالم الفخامة - جورجيا 🌟\n` +
     `📋 ملخص الطلب:\n` +
-    `• المدة: ${totalDays} أيام (${totalNights} ليالي)\n` +
-    `• البالغين: ${req.adults} | الأطفال: ${childrenTotal}\n` +
-    `• تكوين الغرف: ${allocation.totalRooms} غرفة (${roomConfigText})\n\n` +
+    `• المدة: ${days} أيام (${nights} ليالي)\n` +
+    `• البالغين: ${adults} ${childrenDisplay}\n` +
+    `• العدد الفعلي للحساب: ${effectivePax} شخص\n` +
+    `• تكوين الغرف: ${allocation.totalRooms} غرفة (${roomConfigText})\n` +
+    `• المسار: ${routeText}\n\n` +
     offerBlocks.join("\n\n") + "\n\n" +
     carOnlyBlock + "\n\n" +
-    servicesBlock;
-
-  return message;
-}
-
-// ============================================================================
-// CITY DISTRIBUTION HELPER
-// ============================================================================
-
-function getCityDistribution(totalNights: number): CityStay[] {
-  // Default Georgia trip distribution
-  if (totalNights <= 3) {
-    return [{ city: "Tbilisi", nights: totalNights }];
-  } else if (totalNights <= 5) {
-    return [
-      { city: "Tbilisi", nights: 2 },
-      { city: "Batumi", nights: totalNights - 2 },
-    ];
-  } else if (totalNights <= 7) {
-    return [
-      { city: "Tbilisi", nights: 2 },
-      { city: "Gudauri", nights: 1 },
-      { city: "Batumi", nights: totalNights - 3 },
-    ];
-  } else if (totalNights <= 10) {
-    return [
-      { city: "Tbilisi", nights: 2 },
-      { city: "Gudauri", nights: 1 },
-      { city: "Borjomi", nights: 1 },
-      { city: "Batumi", nights: totalNights - 4 },
-    ];
-  } else {
-    // 11+ nights
-    return [
-      { city: "Tbilisi", nights: 3 },
-      { city: "Gudauri", nights: 2 },
-      { city: "Borjomi", nights: 1 },
-      { city: "Bakuriani", nights: 2 },
-      { city: "Batumi", nights: totalNights - 8 },
-    ];
-  }
-}
-
-function getCityNameArabic(cityEn: string): string {
-  const cityNames: Record<string, string> = {
-    "Tbilisi": "تبليسي",
-    "Batumi": "باتومي",
-    "Kutaisi": "كوتايسي",
-    "Borjomi": "بورجومي",
-    "Gudauri": "غوداوري",
-    "Bakuriani": "باكورياني",
-    "Dashbash": "داشباش",
-  };
-  return cityNames[cityEn] || cityEn;
+    servicesBlock
+  );
 }
 
 // ============================================================================
@@ -482,51 +959,22 @@ async function sendTelegram(token: string, chatId: number, text: string) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      chat_id: chatId, 
-      text,
-      parse_mode: "HTML" 
-    }),
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
   });
 }
 
 async function sendTelegramWithKeyboard(token: string, chatId: number, text: string) {
-  const inlineKeyboard = {
+  const keyboard = {
     inline_keyboard: [
-      [
-        {
-          text: "📋 نسخ / إرسال العرض للعميل",
-          switch_inline_query: text.substring(0, 256), // Telegram limit for inline query
-        }
-      ],
-      [
-        {
-          text: "↗️ إعادة توجيه العرض",
-          callback_data: "forward_quote"
-        }
-      ]
-    ]
+      [{ text: "🔄 عرض سعر جديد", callback_data: "new_quote" }],
+      [{ text: "↗️ إعادة توجيه العرض", callback_data: "forward_quote" }],
+    ],
   };
 
-  // First send the main message
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      chat_id: chatId, 
-      text,
-      reply_markup: inlineKeyboard,
-    }),
-  });
-
-  // Also send a separate forwardable message without buttons
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      chat_id: chatId, 
-      text: "⬆️ قم بإعادة توجيه الرسالة أعلاه للعميل مباشرة",
-    }),
+    body: JSON.stringify({ chat_id: chatId, text, reply_markup: keyboard }),
   });
 }
 
@@ -534,10 +982,6 @@ async function answerCallbackQuery(token: string, callbackQueryId: string, text:
   await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ 
-      callback_query_id: callbackQueryId,
-      text,
-      show_alert: false,
-    }),
+    body: JSON.stringify({ callback_query_id: callbackQueryId, text, show_alert: false }),
   });
 }

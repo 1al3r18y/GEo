@@ -156,14 +156,17 @@ export async function fetchCarPricing(): Promise<CarPricing[]> {
 // ============================================================================
 
 /**
- * Gets the car price per day based on total passengers
+ * Gets the car price per day based on EFFECTIVE passengers
  * 
- * @param totalPax - Total number of passengers (adults + all children)
+ * IMPORTANT: Car capacity is based on Effective Pax, NOT total pax!
+ * Children ≤ 6 years don't count towards car capacity.
+ * 
+ * @param effectivePax - Effective passengers (adults + children > 6)
  * @param carPricing - Array of car pricing tiers
  * @returns Daily car rate in USD
  */
-export function getCarDailyRate(totalPax: number, carPricing: CarPricing[]): number {
-  const tier = carPricing.find(c => totalPax >= c.minPax && totalPax <= c.maxPax);
+export function getCarDailyRate(effectivePax: number, carPricing: CarPricing[]): number {
+  const tier = carPricing.find(c => effectivePax >= c.minPax && effectivePax <= c.maxPax);
   
   if (!tier) {
     // If pax exceeds max tier, use the highest tier
@@ -228,35 +231,37 @@ export function calculateTotalHotelCost(
 }
 
 /**
- * Calculates car cost
+ * Calculates car cost based on EFFECTIVE Pax
  * 
  * Formula: Daily Rate × Total Days
+ * Note: Car tier determined by Effective Pax (children ≤6 don't count)
  */
 export function calculateCarCost(
-  totalPax: number,
+  effectivePax: number,
   totalDays: number,
   carPricing: CarPricing[]
 ): number {
-  const dailyRate = getCarDailyRate(totalPax, carPricing);
+  const dailyRate = getCarDailyRate(effectivePax, carPricing);
   return dailyRate * totalDays;
 }
 
 /**
- * Calculates SIM card cost
+ * Calculates SIM card cost based on EFFECTIVE Pax
  * 
- * Formula: (Total Pax - Free SIMs) × SIM Price
- * Only applies if Total Pax > Free SIM Allowance
+ * Formula: (Effective Pax - Free SIMs) × SIM Price
+ * Note: Only Effective Pax (adults + children > 6) get SIM cards
+ * Children ≤ 6 years don't need SIM cards
  */
 export function calculateSimCardCost(
-  totalPax: number,
+  effectivePax: number,
   freeSimAllowance: number,
   simCardPrice: number
 ): number {
-  if (totalPax <= freeSimAllowance) {
+  if (effectivePax <= freeSimAllowance) {
     return 0;
   }
   
-  const chargeableSims = totalPax - freeSimAllowance;
+  const chargeableSims = effectivePax - freeSimAllowance;
   return chargeableSims * simCardPrice;
 }
 

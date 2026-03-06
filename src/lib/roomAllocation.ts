@@ -3,50 +3,87 @@
  * LUXURY WORLD (عالم الفخامة) - Smart Room Allocation Engine
  * ============================================================================
  * 
- * This module implements the intelligent room allocation algorithm that
- * distributes effective passengers into minimal rooms, prioritizing:
- * 1. Triple rooms first
- * 2. Double rooms second
- * 3. Single rooms last (only if necessary)
+ * AGE-BASED OCCUPANCY RULES:
+ * - Children ≤ 6 years: COMPLETELY FREE (ignored in rooms & car)
+ * - Children > 6 years: Counted as FULL ADULT
+ * - Effective Pax = Adults + (Children > 6)
+ * 
+ * STRICT ROOM ALLOCATION MAPPING:
+ * - 1 Pax = 1 Single (billed at DBL/SGL price)
+ * - 2 Pax = 1 Double
+ * - 3 Pax = 1 Triple
+ * - 4 Pax = 2 Doubles
+ * - 5 Pax = 1 Double + 1 Triple
+ * - 6 Pax = 2 Triples
+ * - Priority: Triple rooms to minimize total rooms
  * 
  * @module SmartRoomAllocation
- * @version 1.0.0
+ * @version 2.0.0
  * @date March 6, 2026
  */
 
 export interface RoomAllocation {
-  tripleRooms: number;
-  doubleRooms: number;
   singleRooms: number;
+  doubleRooms: number;
+  tripleRooms: number;
   totalRooms: number;
   effectivePax: number;
 }
 
 export interface PassengerInput {
   adults: number;
-  childrenOver6: number;  // Children > 6 years old count as effective pax
-  childrenUnder6: number; // Children <= 6 years old don't count for room allocation
+  childrenOver6: number;  // Children > 6 years old count as full adult
+  childrenUnder6: number; // Children <= 6 years old = COMPLETELY FREE
 }
 
 /**
- * Calculates the effective number of passengers for room allocation purposes.
+ * Calculates the effective number of passengers for room & car allocation.
  * 
- * Formula: Effective Pax = Adults + Children > 6 years old
+ * Formula: Effective Pax = Adults + (Children > 6)
  * 
- * Children under 6 years old do not count towards room allocation
- * as they typically share beds with adults.
+ * Children 6 years old or under are COMPLETELY FREE:
+ * - They don't count towards room capacity
+ * - They don't count towards car capacity
  * 
  * @param input - Passenger breakdown
- * @returns Number of effective passengers requiring room space
+ * @returns Number of effective passengers
  */
 export function calculateEffectivePax(input: PassengerInput): number {
   return input.adults + input.childrenOver6;
 }
 
 /**
- * Calculates total passengers (for car pricing purposes).
+ * Calculate effective pax from individual child ages
  * 
- * Formula: Total Pax = Adults + All Children
+ * @param adults - Number of adults
+ * @param childAges - Array of each child's age
+ * @returns Breakdown of effective pax and child categories
+ */
+export function calculateEffectivePaxFromAges(
+  adults: number,
+  childAges: number[]
+): { effectivePax: number; childrenOver6: number; childrenUnder6: number } {
+  let childrenOver6 = 0;
+  let childrenUnder6 = 0;
+
+  for (const age of childAges) {
+    if (age > 6) {
+      childrenOver6++;
+    } else {
+      childrenUnder6++;
+    }
+  }
+
+  return {
+    effectivePax: adults + childrenOver6,
+    childrenOver6,
+    childrenUnder6,
+  };
+}
+
+/**
+ * Calculates total passengers for display purposes only.
+ * Note: Car and SIM are based on effectivePax, NOT totalPax!
  * 
  * @param input - Passenger breakdown
  * @returns Total number of passengers
@@ -56,43 +93,54 @@ export function calculateTotalPax(input: PassengerInput): number {
 }
 
 /**
- * Smart Room Allocation Algorithm
+ * Smart Room Allocation Algorithm (STRICT MAPPING)
  * 
- * Distributes effective passengers into the minimum possible number of rooms,
- * strictly prioritizing:
- * 1. Triple rooms (capacity: 3)
- * 2. Double rooms (capacity: 2)
- * 3. Single rooms (capacity: 1) - only when necessary
+ * Uses exact room allocation for 1-6 pax:
+ * - 1 Pax = 1 Single (billed at DBL/SGL price)
+ * - 2 Pax = 1 Double
+ * - 3 Pax = 1 Triple
+ * - 4 Pax = 2 Doubles
+ * - 5 Pax = 1 Double + 1 Triple
+ * - 6 Pax = 2 Triples
  * 
- * The algorithm uses a greedy approach to maximize triple room usage first,
- * then fills remaining capacity with doubles, and uses singles only for
- * any remaining odd person.
+ * For 7+ pax: Prioritizes triples to minimize total rooms
  * 
  * @param effectivePax - Number of passengers requiring room space
  * @returns Optimal room allocation breakdown
  * 
  * @example
- * // 5 effective pax: 1 triple + 1 double = 2 rooms
- * allocateRooms(5) // { tripleRooms: 1, doubleRooms: 1, singleRooms: 0 }
- * 
- * @example
- * // 7 effective pax: 2 triples + 0 doubles + 1 single = 3 rooms
- * allocateRooms(7) // { tripleRooms: 2, doubleRooms: 0, singleRooms: 1 }
+ * allocateRooms(1) // { singleRooms: 1, doubleRooms: 0, tripleRooms: 0 }
+ * allocateRooms(4) // { singleRooms: 0, doubleRooms: 2, tripleRooms: 0 }
+ * allocateRooms(5) // { singleRooms: 0, doubleRooms: 1, tripleRooms: 1 }
  */
 export function allocateRooms(effectivePax: number): RoomAllocation {
   if (effectivePax <= 0) {
     return {
-      tripleRooms: 0,
-      doubleRooms: 0,
       singleRooms: 0,
+      doubleRooms: 0,
+      tripleRooms: 0,
       totalRooms: 0,
       effectivePax: 0,
     };
   }
 
-  // Start by maximizing triple rooms
+  // STRICT MAPPING for 1-6 pax
+  const strictMapping: Record<number, RoomAllocation> = {
+    1: { singleRooms: 1, doubleRooms: 0, tripleRooms: 0, totalRooms: 1, effectivePax: 1 },
+    2: { singleRooms: 0, doubleRooms: 1, tripleRooms: 0, totalRooms: 1, effectivePax: 2 },
+    3: { singleRooms: 0, doubleRooms: 0, tripleRooms: 1, totalRooms: 1, effectivePax: 3 },
+    4: { singleRooms: 0, doubleRooms: 2, tripleRooms: 0, totalRooms: 2, effectivePax: 4 },
+    5: { singleRooms: 0, doubleRooms: 1, tripleRooms: 1, totalRooms: 2, effectivePax: 5 },
+    6: { singleRooms: 0, doubleRooms: 0, tripleRooms: 2, totalRooms: 2, effectivePax: 6 },
+  };
+
+  if (effectivePax <= 6) {
+    return strictMapping[effectivePax];
+  }
+
+  // For 7+ pax: prioritize triples to minimize total rooms
   let tripleRooms = Math.floor(effectivePax / 3);
-  let remaining = effectivePax % 3;
+  const remaining = effectivePax % 3;
 
   let doubleRooms = 0;
   let singleRooms = 0;
@@ -103,34 +151,26 @@ export function allocateRooms(effectivePax: number): RoomAllocation {
       // Perfect fit with triples only
       break;
     case 1:
-      // One person left: 
-      // Option A: 1 single room
-      // Option B: Reduce 1 triple, add 2 doubles (3-1+2*2 = 4, but we need 3+1=4) 
-      // For minimum rooms, 1 single is better than converting
+      // 1 remaining: convert 1 triple to 2 doubles (3+1=4 = 2×2)
       if (tripleRooms > 0) {
-        // Convert: remove 1 triple (lose 3), add 2 doubles (gain 4) - handles 4 people
-        // But we only have 3+1=4 effective people to house
-        // Actually 1 triple + 1 remaining = need to house 4 people
-        // Remove triple: 0 triples, add 2 doubles = 2 rooms for 4 people ✓
         tripleRooms--;
         doubleRooms = 2;
       } else {
-        // No triples to convert, just use 1 single
         singleRooms = 1;
       }
       break;
     case 2:
-      // Two people left: 1 double room is optimal
+      // 2 remaining: 1 double room
       doubleRooms = 1;
       break;
   }
 
-  const totalRooms = tripleRooms + doubleRooms + singleRooms;
+  const totalRooms = singleRooms + doubleRooms + tripleRooms;
 
   return {
-    tripleRooms,
-    doubleRooms,
     singleRooms,
+    doubleRooms,
+    tripleRooms,
     totalRooms,
     effectivePax,
   };
