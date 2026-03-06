@@ -1,11 +1,13 @@
 import { Outlet, NavLink } from "react-router-dom";
-import { Hotel, Car, Plane, Map, Settings, LayoutDashboard, Menu, X } from "lucide-react";
+import { Hotel, Car, Plane, Map, Settings, LayoutDashboard, Menu, X, Tags, DollarSign } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { path: "/", label: "لوحة التحكم", icon: LayoutDashboard },
-  { path: "/hotels", label: "الفنادق", icon: Hotel },
-  { path: "/cars", label: "السيارات", icon: Car },
+  { path: "/hotel-offers", label: "عروض الفنادق", icon: Tags },
+  { path: "/hotels", label: "الفنادق (القديم)", icon: Hotel },
+  { path: "/car-pricing", label: "تسعير السيارات", icon: DollarSign },
+  { path: "/cars", label: "السيارات (القديم)", icon: Car },
   { path: "/airports", label: "المطارات", icon: Plane },
   { path: "/routes", label: "المسارات", icon: Map },
   { path: "/settings", label: "الإعدادات", icon: Settings },

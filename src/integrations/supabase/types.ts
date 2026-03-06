@@ -283,23 +283,110 @@ export type Database = {
       system_settings: {
         Row: {
           active_season: Database["public"]["Enums"]["season_type"]
+          base_currency: string | null
           created_at: string | null
+          exchange_rate_usd_to_sar: number | null
+          free_sim_cards_allowance: number | null
           id: string
           profit_margin: number
           updated_at: string | null
         }
         Insert: {
           active_season?: Database["public"]["Enums"]["season_type"]
+          base_currency?: string | null
           created_at?: string | null
+          exchange_rate_usd_to_sar?: number | null
+          free_sim_cards_allowance?: number | null
           id?: string
           profit_margin?: number
           updated_at?: string | null
         }
         Update: {
           active_season?: Database["public"]["Enums"]["season_type"]
+          base_currency?: string | null
           created_at?: string | null
+          exchange_rate_usd_to_sar?: number | null
+          free_sim_cards_allowance?: number | null
           id?: string
           profit_margin?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      car_pricing: {
+        Row: {
+          id: string
+          min_pax: number
+          max_pax: number
+          price_per_day: number
+          description_ar: string | null
+          description_en: string | null
+          is_active: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          min_pax: number
+          max_pax: number
+          price_per_day: number
+          description_ar?: string | null
+          description_en?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          min_pax?: number
+          max_pax?: number
+          price_per_day?: number
+          description_ar?: string | null
+          description_en?: string | null
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      hotel_offers: {
+        Row: {
+          id: string
+          offer_tier: Database["public"]["Enums"]["offer_tier_type"]
+          city: string
+          hotel_name: string
+          dbl_view: number
+          dbl_no_view: number
+          trbl_view: number
+          trbl_no_view: number
+          is_active: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          offer_tier: Database["public"]["Enums"]["offer_tier_type"]
+          city: string
+          hotel_name: string
+          dbl_view?: number
+          dbl_no_view?: number
+          trbl_view?: number
+          trbl_no_view?: number
+          is_active?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          offer_tier?: Database["public"]["Enums"]["offer_tier_type"]
+          city?: string
+          hotel_name?: string
+          dbl_view?: number
+          dbl_no_view?: number
+          trbl_view?: number
+          trbl_no_view?: number
+          is_active?: boolean | null
+          created_at?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -314,6 +401,7 @@ export type Database = {
     Enums: {
       car_type: "sedan" | "minivan" | "van" | "sprinter"
       hotel_tier: "economy" | "standard" | "superior" | "deluxe" | "luxury"
+      offer_tier_type: "tier_1" | "tier_2" | "tier_3" | "tier_4" | "tier_5"
       season_type: "high" | "low" | "mid"
     }
     CompositeTypes: {

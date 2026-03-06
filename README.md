@@ -1,4 +1,93 @@
-# Welcome to your Lovable project
+# عالم الفخامة - Luxury World Georgia Travel Planner
+
+> نظام تسعير وعروض أسعار وكالة السفر للرحلات إلى جورجيا
+
+## 🌟 نظرة عامة
+
+نظام متكامل لإدارة عروض أسعار رحلات السفر إلى جورجيا، يشمل:
+- **إدارة عروض الفنادق** بـ 5 مستويات مختلفة
+- **تسعير السيارات** بناءً على عدد الركاب
+- **محرك توزيع الغرف الذكي** (Triple → Double → Single)
+- **محرك حساب التكلفة الشامل** مع هامش الربح وتحويل العملات
+
+## 📊 Entity Relationship Diagram (ERD)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           DATABASE SCHEMA                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────┐     ┌──────────────────────┐                      │
+│  │   system_settings    │     │  mandatory_services  │                      │
+│  ├──────────────────────┤     ├──────────────────────┤                      │
+│  │ id (PK)              │     │ id (PK)              │                      │
+│  │ profit_margin (22%)  │     │ sim_card_price ($15) │                      │
+│  │ exchange_rate (3.8)  │     │ insurance_price      │                      │
+│  │ free_sim_cards (2)   │     └──────────────────────┘                      │
+│  │ base_currency        │                                                    │
+│  │ active_season        │                                                    │
+│  └──────────────────────┘                                                    │
+│                                                                              │
+│  ┌──────────────────────┐     ┌──────────────────────┐                      │
+│  │    hotel_offers      │     │    car_pricing       │                      │
+│  ├──────────────────────┤     ├──────────────────────┤                      │
+│  │ id (PK)              │     │ id (PK)              │                      │
+│  │ offer_tier (1-5)     │     │ min_pax              │                      │
+│  │ city                 │     │ max_pax              │                      │
+│  │ hotel_name           │     │ price_per_day        │                      │
+│  │ dbl_view             │     │ description_ar/en    │                      │
+│  │ dbl_no_view          │     └──────────────────────┘                      │
+│  │ trbl_view            │                                                    │
+│  │ trbl_no_view         │     Car Pricing Tiers:                            │
+│  └──────────────────────┘     • 1-3 pax:   $100/day                         │
+│                                • 4-6 pax:   $120/day                         │
+│  5 Offer Tiers:               • 7-8 pax:   $160/day                         │
+│  • Tier 1: Economy            • 9-12 pax:  $250/day                         │
+│  • Tier 2: Standard           • 13-24 pax: $550/day                         │
+│  • Tier 3: Medium             • 25-45 pax: $700/day                         │
+│  • Tier 4: Deluxe                                                            │
+│  • Tier 5: Luxury                                                            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+## 🧮 خوارزمية توزيع الغرف الذكية
+
+```
+Effective Pax = Adults + Children > 6 years old
+
+الأولوية:
+1. غرف ثلاثية (Triple) أولاً
+2. غرف مزدوجة (Double) ثانياً  
+3. غرف مفردة (Single) فقط إذا لزم الأمر
+
+مثال: 5 أشخاص فعليين = 1 ثلاثية + 1 مزدوجة = غرفتان
+```
+
+## 💰 معادلة حساب التكلفة
+
+```
+1. Hotel Cost = Σ(Room Price × Nights) per city
+2. Car Cost = Daily Rate (based on total pax) × Days
+3. SIM Cost = (Total Pax - 2 free) × $15 (if pax > 2)
+4. Initial Cost = Hotel + Car + SIM
+5. With Profit = Initial Cost × 1.22 (22% margin)
+6. Final SAR = With Profit × 3.8 (exchange rate)
+7. Rounded = round(Final ÷ 10) × 10
+```
+
+## 🚀 التشغيل
+
+```bash
+# تثبيت التبعيات
+npm install
+
+# تشغيل خادم التطوير
+npm run dev
+
+# تشغيل الاختبارات
+npm test
+```
 
 ## Project info
 
