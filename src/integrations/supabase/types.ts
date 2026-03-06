@@ -14,7 +14,296 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      airport_transfers: {
+        Row: {
+          airport_id: string
+          car_type: Database["public"]["Enums"]["car_type"]
+          created_at: string | null
+          id: string
+          price: number
+        }
+        Insert: {
+          airport_id: string
+          car_type: Database["public"]["Enums"]["car_type"]
+          created_at?: string | null
+          id?: string
+          price?: number
+        }
+        Update: {
+          airport_id?: string
+          car_type?: Database["public"]["Enums"]["car_type"]
+          created_at?: string | null
+          id?: string
+          price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "airport_transfers_airport_id_fkey"
+            columns: ["airport_id"]
+            isOneToOne: false
+            referencedRelation: "airports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      airports: {
+        Row: {
+          code: string
+          created_at: string | null
+          id: string
+          name_ar: string
+          name_en: string
+        }
+        Insert: {
+          code: string
+          created_at?: string | null
+          id?: string
+          name_ar: string
+          name_en: string
+        }
+        Update: {
+          code?: string
+          created_at?: string | null
+          id?: string
+          name_ar?: string
+          name_en?: string
+        }
+        Relationships: []
+      }
+      cars: {
+        Row: {
+          car_type: Database["public"]["Enums"]["car_type"]
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          max_pax: number
+          min_pax: number
+          name_ar: string
+          name_en: string
+          price_per_day_high: number
+          price_per_day_low: number
+          price_per_day_mid: number
+          updated_at: string | null
+        }
+        Insert: {
+          car_type: Database["public"]["Enums"]["car_type"]
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_pax: number
+          min_pax: number
+          name_ar: string
+          name_en: string
+          price_per_day_high?: number
+          price_per_day_low?: number
+          price_per_day_mid?: number
+          updated_at?: string | null
+        }
+        Update: {
+          car_type?: Database["public"]["Enums"]["car_type"]
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_pax?: number
+          min_pax?: number
+          name_ar?: string
+          name_en?: string
+          price_per_day_high?: number
+          price_per_day_low?: number
+          price_per_day_mid?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      cities: {
+        Row: {
+          created_at: string | null
+          id: string
+          name_ar: string
+          name_en: string
+          sort_order: number | null
+          supports_view: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name_ar: string
+          name_en: string
+          sort_order?: number | null
+          supports_view?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name_ar?: string
+          name_en?: string
+          sort_order?: number | null
+          supports_view?: boolean | null
+        }
+        Relationships: []
+      }
+      city_routes: {
+        Row: {
+          arrival_airport_id: string | null
+          city_id: string
+          created_at: string | null
+          departure_airport_id: string | null
+          id: string
+          nights_in_city: number
+          route_order: number
+          total_nights: number
+        }
+        Insert: {
+          arrival_airport_id?: string | null
+          city_id: string
+          created_at?: string | null
+          departure_airport_id?: string | null
+          id?: string
+          nights_in_city: number
+          route_order?: number
+          total_nights: number
+        }
+        Update: {
+          arrival_airport_id?: string | null
+          city_id?: string
+          created_at?: string | null
+          departure_airport_id?: string | null
+          id?: string
+          nights_in_city?: number
+          route_order?: number
+          total_nights?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "city_routes_arrival_airport_id_fkey"
+            columns: ["arrival_airport_id"]
+            isOneToOne: false
+            referencedRelation: "airports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "city_routes_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "city_routes_departure_airport_id_fkey"
+            columns: ["departure_airport_id"]
+            isOneToOne: false
+            referencedRelation: "airports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hotels: {
+        Row: {
+          city_id: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name_ar: string
+          name_en: string
+          price_double: number
+          price_double_view: number | null
+          price_single: number
+          price_single_view: number | null
+          price_triple: number
+          price_triple_view: number | null
+          tier: Database["public"]["Enums"]["hotel_tier"]
+          updated_at: string | null
+        }
+        Insert: {
+          city_id: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name_ar: string
+          name_en: string
+          price_double?: number
+          price_double_view?: number | null
+          price_single?: number
+          price_single_view?: number | null
+          price_triple?: number
+          price_triple_view?: number | null
+          tier?: Database["public"]["Enums"]["hotel_tier"]
+          updated_at?: string | null
+        }
+        Update: {
+          city_id?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name_ar?: string
+          name_en?: string
+          price_double?: number
+          price_double_view?: number | null
+          price_single?: number
+          price_single_view?: number | null
+          price_triple?: number
+          price_triple_view?: number | null
+          tier?: Database["public"]["Enums"]["hotel_tier"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hotels_city_id_fkey"
+            columns: ["city_id"]
+            isOneToOne: false
+            referencedRelation: "cities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mandatory_services: {
+        Row: {
+          created_at: string | null
+          id: string
+          insurance_price_per_day_per_pax: number
+          sim_card_price: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          insurance_price_per_day_per_pax?: number
+          sim_card_price?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          insurance_price_per_day_per_pax?: number
+          sim_card_price?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          active_season: Database["public"]["Enums"]["season_type"]
+          created_at: string | null
+          id: string
+          profit_margin: number
+          updated_at: string | null
+        }
+        Insert: {
+          active_season?: Database["public"]["Enums"]["season_type"]
+          created_at?: string | null
+          id?: string
+          profit_margin?: number
+          updated_at?: string | null
+        }
+        Update: {
+          active_season?: Database["public"]["Enums"]["season_type"]
+          created_at?: string | null
+          id?: string
+          profit_margin?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +312,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      car_type: "sedan" | "minivan" | "van" | "sprinter"
+      hotel_tier: "economy" | "standard" | "superior" | "deluxe" | "luxury"
+      season_type: "high" | "low" | "mid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +441,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      car_type: ["sedan", "minivan", "van", "sprinter"],
+      hotel_tier: ["economy", "standard", "superior", "deluxe", "luxury"],
+      season_type: ["high", "low", "mid"],
+    },
   },
 } as const
