@@ -1,3 +1,21 @@
+/**
+ * ============================================================================
+ * LUXURY WORLD (عالم الفخامة) - Telegram Bot Webhook Handler
+ * ============================================================================
+ * 
+ * 24/7 Automated Quotation Generator for Customer Service Team
+ * Uses Supabase Edge Functions for webhook-based continuous uptime
+ * 
+ * Features:
+ * - Dynamic pricing from central database
+ * - 5 offer tiers with View/No-View options
+ * - Smart room allocation
+ * - One-click copy/forward functionality
+ * 
+ * @version 2.0.0
+ * @date March 6, 2026
+ */
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -6,30 +24,142 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface TripRequest {
-  arrival_date: string;
-  departure_date: string;
-  arrival_airport: string;
-  departure_airport?: string;
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+interface QuoteRequest {
+  arrivalDate: string;
+  departureDate: string;
   adults: number;
-  children: number;
-  rooms: number;
-  room_type: "single" | "double" | "triple";
-  view_preference: boolean;
+  childrenOver6: number;
+  childrenUnder6: number;
 }
 
-function getCarType(totalPax: number): string {
-  if (totalPax <= 3) return "sedan";
-  if (totalPax <= 6) return "minivan";
-  if (totalPax === 7) return "van";
-  return "sprinter";
+interface RoomAllocation {
+  tripleRooms: number;
+  doubleRooms: number;
+  singleRooms: number;
+  totalRooms: number;
+  effectivePax: number;
 }
+
+interface HotelOffer {
+  city: string;
+  hotelName: string;
+  dblView: number;
+  dblNoView: number;
+  trblView: number;
+  trblNoView: number;
+}
+
+interface CarPricing {
+  minPax: number;
+  maxPax: number;
+  pricePerDay: number;
+}
+
+interface SystemSettings {
+  profitMargin: number;
+  exchangeRateUsdToSar: number;
+  freeSimCardsAllowance: number;
+  simCardPrice: number;
+}
+
+interface CityStay {
+  city: string;
+  nights: number;
+}
+
+// ============================================================================
+// SMART ROOM ALLOCATION ENGINE
+// ============================================================================
+
+function allocateRooms(effectivePax: number): RoomAllocation {
+  if (effectivePax <= 0) {
+    return { tripleRooms: 0, doubleRooms: 0, singleRooms: 0, totalRooms: 0, effectivePax: 0 };
+  }
+
+  let tripleRooms = Math.floor(effectivePax / 3);
+  const remaining = effectivePax % 3;
+  let doubleRooms = 0;
+  let singleRooms = 0;
+
+  switch (remaining) {
+    case 0:
+      break;
+    case 1:
+      if (tripleRooms > 0) {
+        tripleRooms--;
+        doubleRooms = 2;
+      } else {
+        singleRooms = 1;
+      }
+      break;
+    case 2:
+      doubleRooms = 1;
+      break;
+  }
+
+  return {
+    tripleRooms,
+    doubleRooms,
+    singleRooms,
+    totalRooms: tripleRooms + doubleRooms + singleRooms,
+    effectivePax,
+  };
+}
+
+// ============================================================================
+// CALCULATION FUNCTIONS
+// ============================================================================
 
 function daysBetween(d1: string, d2: string): number {
   const date1 = new Date(d1);
   const date2 = new Date(d2);
   return Math.ceil((date2.getTime() - date1.getTime()) / (1000 * 60 * 60 * 24));
 }
+
+function getCarDailyRate(totalPax: number, carPricing: CarPricing[]): number {
+  const tier = carPricing.find(c => totalPax >= c.minPax && totalPax <= c.maxPax);
+  if (!tier) {
+    const maxTier = carPricing.reduce((max, c) => c.maxPax > max.maxPax ? c : max, carPricing[0]);
+    return maxTier?.pricePerDay ?? 0;
+  }
+  return tier.pricePerDay;
+}
+
+function calculateHotelCost(
+  cityStays: CityStay[],
+  allocation: RoomAllocation,
+  hotelOffers: HotelOffer[],
+  withView: boolean
+): number {
+  let totalCost = 0;
+  
+  for (const stay of cityStays) {
+    const hotel = hotelOffers.find(h => h.city.toLowerCase() === stay.city.toLowerCase());
+    if (hotel) {
+      const doublePrice = withView ? hotel.dblView : hotel.dblNoView;
+      const triplePrice = withView ? hotel.trblView : hotel.trblNoView;
+      const costPerNight = 
+        (allocation.tripleRooms * triplePrice) + 
+        (allocation.doubleRooms * doublePrice) +
+        (allocation.singleRooms * doublePrice);
+      totalCost += costPerNight * stay.nights;
+    }
+  }
+  
+  return totalCost;
+}
+
+function roundToNearest10(price: number): number {
+  return Math.round(price / 10) * 10;
+}
+
+// ============================================================================
+// MAIN BOT HANDLER
+// ============================================================================
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -51,53 +181,74 @@ Deno.serve(async (req) => {
       const text = body.message.text || "";
 
       if (text === "/start") {
-        await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
-          "🏨 مرحباً بك في نظام عالم الفخامة - جورجيا\n\n" +
-          "أرسل طلب عرض سعر بالصيغة التالية:\n\n" +
-          "/quote تاريخ_الوصول تاريخ_المغادرة مطار_الوصول بالغين أطفال غرف نوع_الغرفة إطلالة\n\n" +
-          "مثال:\n/quote 2026-07-01 2026-07-08 TBS 2 1 1 double yes\n\n" +
-          "أنواع الغرف: single / double / triple\n" +
-          "إطلالة: yes / no\n" +
-          "المطارات: TBS / KUT / BUS"
-        );
+        const welcomeMsg = 
+          `🌟 مرحباً بك في نظام عالم الفخامة - جورجيا 🌟\n\n` +
+          `نظام تسعير آلي يعمل على مدار الساعة 24/7\n\n` +
+          `📝 لطلب عرض سعر، أرسل:\n` +
+          `/quote YYYY-MM-DD YYYY-MM-DD بالغين أطفال_فوق_6 أطفال_تحت_6\n\n` +
+          `📌 مثال:\n` +
+          `/quote 2026-07-01 2026-07-08 2 1 1\n\n` +
+          `سيتم حساب:\n` +
+          `• 5 عروض فندقية (مع وبدون إطلالة)\n` +
+          `• توزيع الغرف الذكي تلقائياً\n` +
+          `• عرض سيارة فقط\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `💎 عالم الفخامة - Luxury World`;
+
+        await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, welcomeMsg);
         return new Response("OK", { headers: corsHeaders });
       }
 
       if (text.startsWith("/quote")) {
         const parts = text.split(" ").slice(1);
-        if (parts.length < 8) {
+        if (parts.length < 5) {
           await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId,
-            "❌ صيغة غير صحيحة. استخدم:\n/quote تاريخ_وصول تاريخ_مغادرة مطار بالغين أطفال غرف نوع_غرفة إطلالة\n\nمثال: /quote 2026-07-01 2026-07-08 TBS 2 1 1 double yes"
+            `❌ صيغة غير صحيحة\n\n` +
+            `الصيغة الصحيحة:\n` +
+            `/quote تاريخ_وصول تاريخ_مغادرة بالغين أطفال_فوق_6 أطفال_تحت_6\n\n` +
+            `مثال:\n` +
+            `/quote 2026-07-01 2026-07-08 2 1 0`
           );
           return new Response("OK", { headers: corsHeaders });
         }
 
-        const request: TripRequest = {
-          arrival_date: parts[0],
-          departure_date: parts[1],
-          arrival_airport: parts[2].toUpperCase(),
-          adults: parseInt(parts[3]),
-          children: parseInt(parts[4]),
-          rooms: parseInt(parts[5]),
-          room_type: parts[6] as any,
-          view_preference: parts[7]?.toLowerCase() === "yes",
+        const request: QuoteRequest = {
+          arrivalDate: parts[0],
+          departureDate: parts[1],
+          adults: parseInt(parts[2]) || 0,
+          childrenOver6: parseInt(parts[3]) || 0,
+          childrenUnder6: parseInt(parts[4]) || 0,
         };
 
-        const quote = await calculateQuote(supabase, request);
-        await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, quote);
+        // Generate quotation
+        const quoteMessage = await generateQuotation(supabase, request);
+        
+        // Send with inline keyboard for copy/forward
+        await sendTelegramWithKeyboard(TELEGRAM_BOT_TOKEN!, chatId, quoteMessage);
+        
         return new Response("OK", { headers: corsHeaders });
       }
 
-      await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, "أرسل /start للبدء أو /quote لطلب عرض سعر");
+      // Handle callback queries (button presses)
+      await sendTelegram(TELEGRAM_BOT_TOKEN!, chatId, 
+        `أرسل /start للبدء أو /quote لطلب عرض سعر`
+      );
       return new Response("OK", { headers: corsHeaders });
     }
 
-    // Handle direct API call for quote calculation
-    if (body.action === "calculate") {
-      const quote = await calculateQuote(supabase, body.request);
-      return new Response(JSON.stringify({ quote }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Handle callback query (inline button press)
+    if (body.callback_query) {
+      const callbackQuery = body.callback_query;
+      const data = callbackQuery.data;
+      
+      if (data === "copy_quote") {
+        // Answer callback to remove loading state
+        await answerCallbackQuery(TELEGRAM_BOT_TOKEN!, callbackQuery.id, 
+          "تم! يمكنك الآن إعادة توجيه الرسالة للعميل"
+        );
+      }
+      
+      return new Response("OK", { headers: corsHeaders });
     }
 
     return new Response("OK", { headers: corsHeaders });
@@ -110,158 +261,283 @@ Deno.serve(async (req) => {
   }
 });
 
-async function calculateQuote(supabase: any, req: TripRequest): Promise<string> {
-  const totalDays = daysBetween(req.arrival_date, req.departure_date);
+// ============================================================================
+// QUOTATION GENERATOR
+// ============================================================================
+
+async function generateQuotation(supabase: any, req: QuoteRequest): Promise<string> {
+  const totalDays = daysBetween(req.arrivalDate, req.departureDate);
   const totalNights = totalDays;
-  const totalPax = req.adults + req.children;
-  const carType = getCarType(totalPax);
+  const effectivePax = req.adults + req.childrenOver6;
+  const totalPax = req.adults + req.childrenOver6 + req.childrenUnder6;
 
-  // Fetch all needed data
-  const [settingsRes, servicesRes, carsRes, airportsRes, transfersRes, routesRes, hotelsRes, citiesRes] = await Promise.all([
-    supabase.from("system_settings").select("*").single(),
-    supabase.from("mandatory_services").select("*").single(),
-    supabase.from("cars").select("*").eq("car_type", carType).single(),
-    supabase.from("airports").select("*"),
-    supabase.from("airport_transfers").select("*").eq("car_type", carType),
-    supabase.from("city_routes").select("*, cities(name_ar, supports_view)").eq("total_nights", totalNights).order("route_order"),
-    supabase.from("hotels").select("*, cities(name_ar, supports_view)").eq("is_active", true).order("tier"),
-    supabase.from("cities").select("*").order("sort_order"),
-  ]);
+  // Fetch all dynamic data from database
+  const [settingsRes, servicesRes, carPricingRes, tier1Res, tier2Res, tier3Res, tier4Res, tier5Res] = 
+    await Promise.all([
+      supabase.from("system_settings").select("*").single(),
+      supabase.from("mandatory_services").select("*").single(),
+      supabase.from("car_pricing").select("*").eq("is_active", true).order("min_pax"),
+      supabase.from("hotel_offers").select("*").eq("offer_tier", "tier_1").eq("is_active", true),
+      supabase.from("hotel_offers").select("*").eq("offer_tier", "tier_2").eq("is_active", true),
+      supabase.from("hotel_offers").select("*").eq("offer_tier", "tier_3").eq("is_active", true),
+      supabase.from("hotel_offers").select("*").eq("offer_tier", "tier_4").eq("is_active", true),
+      supabase.from("hotel_offers").select("*").eq("offer_tier", "tier_5").eq("is_active", true),
+    ]);
 
-  const settings = settingsRes.data;
-  const services = servicesRes.data;
-  const car = carsRes.data;
-  const airports = airportsRes.data || [];
-  const transfers = transfersRes.data || [];
-  const routes = routesRes.data || [];
-  const hotels = hotelsRes.data || [];
-  const cities = citiesRes.data || [];
-  const profitMargin = settings?.profit_margin ?? 15;
-  const season = settings?.active_season ?? "high";
-
-  // Car price per day based on season
-  const carPricePerDay = car ? (season === "high" ? car.price_per_day_high : season === "mid" ? car.price_per_day_mid : car.price_per_day_low) : 0;
-  const totalCarCost = carPricePerDay * totalDays;
-
-  // Airport transfer costs
-  const arrivalAirport = airports.find((a: any) => a.code === req.arrival_airport);
-  const depAirport = airports.find((a: any) => a.code === (req.departure_airport || req.arrival_airport));
-  const arrivalTransfer = transfers.find((t: any) => t.airport_id === arrivalAirport?.id);
-  const departureTransfer = transfers.find((t: any) => t.airport_id === depAirport?.id);
-  const transferCost = (arrivalTransfer?.price ?? 0) + (departureTransfer?.price ?? 0);
-
-  // Mandatory services
-  const simCost = (services?.sim_card_price ?? 15) * totalPax;
-  const insuranceCost = (services?.insurance_price_per_day_per_pax ?? 5) * totalDays * totalPax;
-
-  // Determine route
-  let cityDistribution = routes;
-  if (cityDistribution.length === 0) {
-    // Fallback: distribute evenly across first 2 cities
-    const c1 = cities[0];
-    const c2 = cities[1];
-    if (c1 && c2) {
-      const n1 = Math.ceil(totalNights / 2);
-      const n2 = totalNights - n1;
-      cityDistribution = [
-        { city_id: c1.id, cities: c1, nights_in_city: n1, route_order: 1 },
-        { city_id: c2.id, cities: c2, nights_in_city: n2, route_order: 2 },
-      ];
-    } else if (c1) {
-      cityDistribution = [{ city_id: c1.id, cities: c1, nights_in_city: totalNights, route_order: 1 }];
-    }
-  }
-
-  // Get hotel price based on room type and view
-  const getHotelPrice = (hotel: any, wantView: boolean): number => {
-    const citySupportsView = hotel.cities?.supports_view;
-    const useView = wantView && citySupportsView;
-    
-    switch (req.room_type) {
-      case "single": return useView ? (hotel.price_single_view ?? hotel.price_single) : hotel.price_single;
-      case "double": return useView ? (hotel.price_double_view ?? hotel.price_double) : hotel.price_double;
-      case "triple": return useView ? (hotel.price_triple_view ?? hotel.price_triple) : hotel.price_triple;
-      default: return hotel.price_double;
-    }
+  const settings: SystemSettings = {
+    profitMargin: settingsRes.data?.profit_margin ?? 22,
+    exchangeRateUsdToSar: settingsRes.data?.exchange_rate_usd_to_sar ?? 3.8,
+    freeSimCardsAllowance: settingsRes.data?.free_sim_cards_allowance ?? 2,
+    simCardPrice: servicesRes.data?.sim_card_price ?? 15,
   };
 
-  // Group hotels by tier
-  const tiers = ["economy", "standard", "superior", "deluxe", "luxury"];
-  const roomTypeAr: Record<string, string> = { single: "مفرد", double: "مزدوج", triple: "ثلاثي" };
-  const viewPrefAr = req.view_preference ? "مع إطلالة" : "بدون إطلالة";
+  const carPricing: CarPricing[] = (carPricingRes.data || []).map((c: any) => ({
+    minPax: c.min_pax,
+    maxPax: c.max_pax,
+    pricePerDay: c.price_per_day,
+  }));
 
-  // Generate 5 offers
-  const offers: string[] = [];
-  const offerLabels = ["الأول", "الثاني", "الثالث", "الرابع", "الخامس"];
+  const tierOffers: HotelOffer[][] = [
+    tier1Res.data || [],
+    tier2Res.data || [],
+    tier3Res.data || [],
+    tier4Res.data || [],
+    tier5Res.data || [],
+  ].map(tierData => tierData.map((h: any) => ({
+    city: h.city,
+    hotelName: h.hotel_name,
+    dblView: h.dbl_view,
+    dblNoView: h.dbl_no_view,
+    trblView: h.trbl_view,
+    trblNoView: h.trbl_no_view,
+  })));
 
-  for (let tierIdx = 0; tierIdx < tiers.length; tierIdx++) {
-    const tier = tiers[tierIdx];
-    let hotelNightsCost = 0;
-    const cityHotels: string[] = [];
-    const nightsDist: string[] = [];
+  // Smart room allocation
+  const allocation = allocateRooms(effectivePax);
 
-    for (const route of cityDistribution) {
-      const cityHotel = hotels.find((h: any) => h.city_id === route.city_id && h.tier === tier);
-      if (cityHotel) {
-        const pricePerNight = getHotelPrice(cityHotel, req.view_preference) * req.rooms;
-        hotelNightsCost += pricePerNight * route.nights_in_city;
-        cityHotels.push(`• ${route.cities?.name_ar}: ${cityHotel.name_ar}`);
-        nightsDist.push(`• ${route.cities?.name_ar}: ${route.nights_in_city} ليالي`);
-      } else {
-        // Fallback: use any hotel of same tier or nearest tier
-        const fallback = hotels.find((h: any) => h.city_id === route.city_id);
-        if (fallback) {
-          const pricePerNight = getHotelPrice(fallback, req.view_preference) * req.rooms;
-          hotelNightsCost += pricePerNight * route.nights_in_city;
-          cityHotels.push(`• ${route.cities?.name_ar}: ${fallback.name_ar}`);
-          nightsDist.push(`• ${route.cities?.name_ar}: ${route.nights_in_city} ليالي`);
-        }
-      }
-    }
+  // Format room configuration text
+  let roomConfigText = "";
+  if (allocation.tripleRooms > 0) roomConfigText += `${allocation.tripleRooms} ثلاثية`;
+  if (allocation.doubleRooms > 0) roomConfigText += (roomConfigText ? " + " : "") + `${allocation.doubleRooms} مزدوجة`;
+  if (allocation.singleRooms > 0) roomConfigText += (roomConfigText ? " + " : "") + `${allocation.singleRooms} مفردة`;
+  if (!roomConfigText) roomConfigText = "لا يوجد";
 
-    const baseCost = hotelNightsCost + totalCarCost + transferCost + simCost + insuranceCost;
-    const finalPrice = Math.ceil(baseCost * (1 + profitMargin / 100));
+  // City distribution (default for Georgia trip)
+  const cityStays: CityStay[] = getCityDistribution(totalNights);
 
-    offers.push(
+  // Calculate car cost
+  const carDailyRate = getCarDailyRate(totalPax, carPricing);
+  const carCost = carDailyRate * totalDays;
+
+  // Calculate SIM card cost
+  const simCost = totalPax > settings.freeSimCardsAllowance 
+    ? (totalPax - settings.freeSimCardsAllowance) * settings.simCardPrice 
+    : 0;
+
+  // Offer tier labels
+  const tierLabels = [
+    "💎 العرض الأول (اقتصادي مميز)",
+    "💎 العرض الثاني (ستاندرد)",
+    "💎 العرض الثالث (متوسط)",
+    "💎 العرض الرابع (ديلوكس)",
+    "💎 العرض الخامس (فاخر جداً)",
+  ];
+
+  // Generate offers
+  const offerBlocks: string[] = [];
+
+  for (let i = 0; i < 5; i++) {
+    const hotelOffers = tierOffers[i];
+    
+    // Calculate hotel costs for both view options
+    const hotelCostNoView = calculateHotelCost(cityStays, allocation, hotelOffers, false);
+    const hotelCostWithView = calculateHotelCost(cityStays, allocation, hotelOffers, true);
+
+    // Initial costs
+    const initialCostNoView = hotelCostNoView + carCost + simCost;
+    const initialCostWithView = hotelCostWithView + carCost + simCost;
+
+    // Apply profit margin
+    const withProfitNoView = initialCostNoView * (1 + settings.profitMargin / 100);
+    const withProfitWithView = initialCostWithView * (1 + settings.profitMargin / 100);
+
+    // Convert to SAR and round
+    const finalPriceNoView = roundToNearest10(withProfitNoView * settings.exchangeRateUsdToSar);
+    const finalPriceWithView = roundToNearest10(withProfitWithView * settings.exchangeRateUsdToSar);
+
+    // Format USD prices for display
+    const usdNoView = roundToNearest10(withProfitNoView);
+    const usdWithView = roundToNearest10(withProfitWithView);
+
+    // Build hotel list
+    const hotelList = cityStays.map(stay => {
+      const hotel = hotelOffers.find(h => h.city.toLowerCase() === stay.city.toLowerCase());
+      const cityNameAr = getCityNameArabic(stay.city);
+      return `• ${cityNameAr} (${stay.nights} ليالي): ${hotel?.hotelName || "فندق محلي مميز"}`;
+    }).join("\n");
+
+    offerBlocks.push(
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `العرض ${tierIdx + 1} (${offerLabels[tierIdx]}) : $${finalPrice}\n` +
-      `توزيع الليالي:\n${nightsDist.join("\n")}\n` +
-      `الفنادق :\n${cityHotels.join("\n")}`
+      `${tierLabels[i]}:\n` +
+      `💵 السعر بدون إطلالة: ${finalPriceNoView} ر.س ($${usdNoView})\n` +
+      `🖼️ السعر مع إطلالة: ${finalPriceWithView} ر.س ($${usdWithView})\n` +
+      `🏨 الفنادق وتوزيع الليالي:\n` +
+      hotelList
     );
   }
 
   // Car only offer
-  const carOnlyBase = totalCarCost + transferCost + simCost + insuranceCost;
-  const carOnlyPrice = Math.ceil(carOnlyBase * (1 + profitMargin / 100));
+  const carOnlyInitial = carCost + simCost;
+  const carOnlyWithProfit = carOnlyInitial * (1 + settings.profitMargin / 100);
+  const carOnlyFinal = roundToNearest10(carOnlyWithProfit * settings.exchangeRateUsdToSar);
+  const carOnlyUsd = roundToNearest10(carOnlyWithProfit);
 
-  const carOnlyOffer = 
+  const carOnlyBlock = 
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `عرض سيارة فقط : $${carOnlyPrice}\n` +
-    `يشمل:\n` +
-    `• سيارة مع سائق لمدة ${totalDays} أيام\n` +
-    `• خط اتصال\n` +
-    `• تأمين شامل\n` +
-    `• لا يشمل الإقامة`;
+    `🚗 عرض سيارة فقط (بدون إقامة): ${carOnlyFinal} ر.س ($${carOnlyUsd})\n` +
+    `يشمل: سيارة مع سائق لمدة ${totalDays} أيام، خطوط اتصال، وتأمين شامل.`;
+
+  // Included services
+  const servicesBlock = 
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `✅ الخدمات المشمولة في العروض الفندقية:\n` +
+    `• استقبال وتوديع من وإلى المطار.\n` +
+    `• سيارة خاصة مع سائق طوال فترة الرحلة.\n` +
+    `• إفطار يومي في الفنادق.\n` +
+    `• شرائح اتصال مع إنترنت.\n` +
+    `• تأمين سفر شامل.`;
 
   // Build final message
+  const childrenTotal = req.childrenOver6 + req.childrenUnder6;
+  
   const message = 
-    `🌟 عروض رحلات جورجيا المميزة 🌟\n\n` +
-    `ملخص الطلب:\n` +
+    `🌟 عروض عالم الفخامة - جورجيا 🌟\n` +
+    `📋 ملخص الطلب:\n` +
     `• المدة: ${totalDays} أيام (${totalNights} ليالي)\n` +
-    `• البالغين: ${req.adults}\n` +
-    `• الأطفال: ${req.children}\n` +
-    `• تكوين الغرف: ${req.rooms} ${roomTypeAr[req.room_type]}\n` +
-    `• نوع الإطلالة: ${viewPrefAr}\n\n` +
-    offers.join("\n\n") + "\n\n" +
-    carOnlyOffer;
+    `• البالغين: ${req.adults} | الأطفال: ${childrenTotal}\n` +
+    `• تكوين الغرف: ${allocation.totalRooms} غرفة (${roomConfigText})\n\n` +
+    offerBlocks.join("\n\n") + "\n\n" +
+    carOnlyBlock + "\n\n" +
+    servicesBlock;
 
   return message;
 }
+
+// ============================================================================
+// CITY DISTRIBUTION HELPER
+// ============================================================================
+
+function getCityDistribution(totalNights: number): CityStay[] {
+  // Default Georgia trip distribution
+  if (totalNights <= 3) {
+    return [{ city: "Tbilisi", nights: totalNights }];
+  } else if (totalNights <= 5) {
+    return [
+      { city: "Tbilisi", nights: 2 },
+      { city: "Batumi", nights: totalNights - 2 },
+    ];
+  } else if (totalNights <= 7) {
+    return [
+      { city: "Tbilisi", nights: 2 },
+      { city: "Gudauri", nights: 1 },
+      { city: "Batumi", nights: totalNights - 3 },
+    ];
+  } else if (totalNights <= 10) {
+    return [
+      { city: "Tbilisi", nights: 2 },
+      { city: "Gudauri", nights: 1 },
+      { city: "Borjomi", nights: 1 },
+      { city: "Batumi", nights: totalNights - 4 },
+    ];
+  } else {
+    // 11+ nights
+    return [
+      { city: "Tbilisi", nights: 3 },
+      { city: "Gudauri", nights: 2 },
+      { city: "Borjomi", nights: 1 },
+      { city: "Bakuriani", nights: 2 },
+      { city: "Batumi", nights: totalNights - 8 },
+    ];
+  }
+}
+
+function getCityNameArabic(cityEn: string): string {
+  const cityNames: Record<string, string> = {
+    "Tbilisi": "تبليسي",
+    "Batumi": "باتومي",
+    "Kutaisi": "كوتايسي",
+    "Borjomi": "بورجومي",
+    "Gudauri": "غوداوري",
+    "Bakuriani": "باكورياني",
+    "Dashbash": "داشباش",
+  };
+  return cityNames[cityEn] || cityEn;
+}
+
+// ============================================================================
+// TELEGRAM API HELPERS
+// ============================================================================
 
 async function sendTelegram(token: string, chatId: number, text: string) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+    body: JSON.stringify({ 
+      chat_id: chatId, 
+      text,
+      parse_mode: "HTML" 
+    }),
+  });
+}
+
+async function sendTelegramWithKeyboard(token: string, chatId: number, text: string) {
+  const inlineKeyboard = {
+    inline_keyboard: [
+      [
+        {
+          text: "📋 نسخ / إرسال العرض للعميل",
+          switch_inline_query: text.substring(0, 256), // Telegram limit for inline query
+        }
+      ],
+      [
+        {
+          text: "↗️ إعادة توجيه العرض",
+          callback_data: "forward_quote"
+        }
+      ]
+    ]
+  };
+
+  // First send the main message
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      chat_id: chatId, 
+      text,
+      reply_markup: inlineKeyboard,
+    }),
+  });
+
+  // Also send a separate forwardable message without buttons
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      chat_id: chatId, 
+      text: "⬆️ قم بإعادة توجيه الرسالة أعلاه للعميل مباشرة",
+    }),
+  });
+}
+
+async function answerCallbackQuery(token: string, callbackQueryId: string, text: string) {
+  await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      callback_query_id: callbackQueryId,
+      text,
+      show_alert: false,
+    }),
   });
 }
