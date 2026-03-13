@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Tajawal',sans-serif;direction:rtl;color:#222;background:#fff;font-size:12.5px;line-height:1.6}
+
+.header{background:linear-gradient(135deg,#1B1B2F 0%,#27293D 100%);color:#fff;padding:28px 20px 22px;text-align:center}
+.header img{display:block;margin:0 auto 10px;max-width:140px}
+.brand{font-size:24px;font-weight:700;color:#D4AF37;letter-spacing:.5px}
+.subtitle{font-size:13px;font-weight:400;margin-top:3px;color:rgba(255,255,255,.85)}
+
+.summary{background:#FAFAF7;border:1px solid #E8E2D6;padding:14px 20px;margin:14px 16px;border-radius:6px;border-right:4px solid #D4AF37}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 18px}
+.s-item{font-size:12.5px;font-weight:500}
+.s-lbl{font-weight:700;color:#1B1B2F}
+
+.tier{margin:10px 16px;border:1px solid #E0D9CC;border-radius:6px;overflow:hidden;page-break-inside:avoid;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.tier-hdr{background:linear-gradient(90deg,#1B1B2F,#2C2C44);color:#D4AF37;padding:7px 16px;font-weight:700;font-size:13.5px}
+table{width:100%;border-collapse:collapse}
+th{background:#27293D;color:#D4AF37;padding:5px 10px;text-align:right;font-weight:700;font-size:11px;text-transform:uppercase}
+td{padding:5px 10px;text-align:right;border-bottom:1px solid #F0EDE6;font-size:12px}
+th.idx,td.idx{width:28px;text-align:center;color:#999}
+td.center,th.center{text-align:center}
+tr:nth-child(even) td{background:#FAFAF7}
+tr:hover td{background:#F5F0E3}
+
+.prices{display:flex;gap:10px;padding:8px 14px;justify-content:flex-start;flex-wrap:wrap}
+.price-chip{display:flex;align-items:center;gap:6px;padding:4px 14px;border-radius:20px;font-weight:700;font-size:14px}
+.price-chip.gold{background:linear-gradient(135deg,#D4AF37,#F5D76E);color:#1B1B2F}
+.price-chip.silver{background:linear-gradient(135deg,#C0C0C0,#E8E8E8);color:#333}
+.plbl{font-size:11px;font-weight:500;opacity:.85}
+.pval{font-size:15px;font-weight:700}
+
+.car-only{background:linear-gradient(135deg,#1B1B2F,#27293D);border-radius:6px;padding:14px 18px;margin:10px 16px;text-align:center;page-break-inside:avoid;color:#fff}
+.car-only-label{font-weight:700;font-size:13px;color:#D4AF37}
+.car-only-price{font-weight:700;font-size:22px;color:#1B1B2F;background:linear-gradient(135deg,#D4AF37,#F5D76E);display:inline-block;padding:4px 22px;border-radius:20px;margin-top:6px}
+
+.services{background:#F6FBF6;border:1px solid #C8E6C9;border-right:4px solid #388E3C;padding:12px 18px;margin:10px 16px;border-radius:6px;page-break-inside:avoid}
+.services h3{color:#2E7D32;font-weight:700;font-size:13px;margin-bottom:5px}
+.services ul{list-style:none;padding:0;columns:2;column-gap:16px}
+.services li{padding:2px 0;font-size:12px}
+.services li::before{content:"✅ "}
+
+.terms-section{margin:10px 16px;page-break-inside:avoid}
+.terms-section h3{font-size:13px;font-weight:700;padding:6px 14px;border-radius:5px 5px 0 0;margin:0}
+.terms-section .t-body{padding:10px 16px;border-radius:0 0 5px 5px;font-size:12px;line-height:1.7}
+.note-box h3{background:#FFF3E0;color:#E65100;border:1px solid #FFE0B2;border-bottom:none}
+.note-box .t-body{background:#FFFBF5;border:1px solid #FFE0B2;border-top:none;color:#4E342E}
+.confirm-box h3{background:#E3F2FD;color:#0D47A1;border:1px solid #BBDEFB;border-bottom:none}
+.confirm-box .t-body{background:#F5FAFF;border:1px solid #BBDEFB;border-top:none;color:#1A237E}
+.warn-box h3{background:#FCE4EC;color:#B71C1C;border:1px solid #F8BBD0;border-bottom:none}
+.warn-box .t-body{background:#FFF5F7;border:1px solid #F8BBD0;border-top:none;color:#4A0E0E}
+.closing-box h3{background:linear-gradient(90deg,#1B1B2F,#27293D);color:#D4AF37;border:1px solid #444;border-bottom:none}
+.closing-box .t-body{background:#1B1B2F;border:1px solid #444;border-top:none;color:#EAEAEA;text-align:center;font-size:13px;font-weight:500}
+
+.footer{background:#1B1B2F;color:rgba(255,255,255,.7);text-align:center;padding:10px;font-size:10px;margin-top:8px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="https://www.lwiat.com/wp-content/uploads/2023/01/logo-web-1.webp" alt="عالم الفخامة" />
+  <div class="brand">عالم الفخامة</div>
+  <div class="subtitle">LUXURY WORLD — عرض سعر رحلة جورجيا</div>
+</div>
+
+<div class="summary">
+  <div class="summary-grid">
+    <div class="s-item"><span class="s-lbl">المدة:</span> 10 أيام / 9 ليالي</div>
+    <div class="s-item"><span class="s-lbl">الغرف:</span> 1 (1 ثلاثية)</div>
+    <div class="s-item"><span class="s-lbl">المسار:</span> تبليسي ➔ غوداوري ➔ باتومي</div>
+    <div class="s-item"><span class="s-lbl">البالغين:</span> 3 | الأطفال: 1 (مجاناً)</div>
+    <div class="s-item"><span class="s-lbl">مطار الوصول:</span> مطار تبليسي</div>
+    <div class="s-item"><span class="s-lbl">مطار المغادرة:</span> مطار باتومي</div>
+  </div>
+</div>
+
+
+    <div class="tier">
+      <div class="tier-hdr">🥉 العرض الأول — اقتصادي</div>
+      <table>
+        <thead><tr><th class="idx">#</th><th>المدينة</th><th class="center">الليالي</th><th>الفندق</th></tr></thead>
+        <tbody><tr><td class="idx">1</td><td>تبليسي</td><td class="center">4</td><td>هوليداي ان تبليسي</td></tr><tr><td class="idx">2</td><td>غوداوري</td><td class="center">2</td><td>ماركو بولو غوداوري</td></tr><tr><td class="idx">3</td><td>باتومي</td><td class="center">3</td><td>بيست ويسترن باتومي</td></tr></tbody>
+      </table>
+      
+        <div class="prices">
+          <div class="price-chip gold"><span class="plbl">مع إطلالة</span><span class="pval">$2150</span></div>
+          <div class="price-chip silver"><span class="plbl">بدون إطلالة</span><span class="pval">$1890</span></div>
+        </div>
+    </div>
+    <div class="tier">
+      <div class="tier-hdr">🥈 العرض الثاني — ستاندرد</div>
+      <table>
+        <thead><tr><th class="idx">#</th><th>المدينة</th><th class="center">الليالي</th><th>الفندق</th></tr></thead>
+        <tbody><tr><td class="idx">1</td><td>تبليسي</td><td class="center">4</td><td>رامادا بلازا تبليسي</td></tr><tr><td class="idx">2</td><td>غوداوري</td><td class="center">2</td><td>غوداوري لوفت</td></tr><tr><td class="idx">3</td><td>باتومي</td><td class="center">3</td><td>هيلتون باتومي</td></tr></tbody>
+      </table>
+      
+        <div class="prices">
+          <div class="price-chip gold"><span class="plbl">مع إطلالة</span><span class="pval">$2600</span></div>
+          <div class="price-chip silver"><span class="plbl">بدون إطلالة</span><span class="pval">$2340</span></div>
+        </div>
+    </div>
+    <div class="tier">
+      <div class="tier-hdr">🥇 العرض الثالث — متوسط</div>
+      <table>
+        <thead><tr><th class="idx">#</th><th>المدينة</th><th class="center">الليالي</th><th>الفندق</th></tr></thead>
+        <tbody><tr><td class="idx">1</td><td>تبليسي</td><td class="center">4</td><td>شيراتون متروبول تبليسي</td></tr><tr><td class="idx">2</td><td>غوداوري</td><td class="center">2</td><td>رومز غوداوري</td></tr><tr><td class="idx">3</td><td>باتومي</td><td class="center">3</td><td>شيراتون باتومي</td></tr></tbody>
+      </table>
+      
+        <div class="prices">
+          <div class="price-chip gold"><span class="plbl">مع إطلالة</span><span class="pval">$3100</span></div>
+          <div class="price-chip silver"><span class="plbl">بدون إطلالة</span><span class="pval">$2850</span></div>
+        </div>
+    </div>
+    <div class="tier">
+      <div class="tier-hdr">💎 العرض الرابع — ديلوكس</div>
+      <table>
+        <thead><tr><th class="idx">#</th><th>المدينة</th><th class="center">الليالي</th><th>الفندق</th></tr></thead>
+        <tbody><tr><td class="idx">1</td><td>تبليسي</td><td class="center">4</td><td>ماريوت تبليسي</td></tr><tr><td class="idx">2</td><td>غوداوري</td><td class="center">2</td><td>غوداوري ماريوت</td></tr><tr><td class="idx">3</td><td>باتومي</td><td class="center">3</td><td>ويندهام باتومي</td></tr></tbody>
+      </table>
+      
+        <div class="prices">
+          <div class="price-chip gold"><span class="plbl">مع إطلالة</span><span class="pval">$3650</span></div>
+          <div class="price-chip silver"><span class="plbl">بدون إطلالة</span><span class="pval">$3400</span></div>
+        </div>
+    </div>
+    <div class="tier">
+      <div class="tier-hdr">👑 العرض الخامس — فاخر</div>
+      <table>
+        <thead><tr><th class="idx">#</th><th>المدينة</th><th class="center">الليالي</th><th>الفندق</th></tr></thead>
+        <tbody><tr><td class="idx">1</td><td>تبليسي</td><td class="center">4</td><td>بولمان تبليسي</td></tr><tr><td class="idx">2</td><td>غوداوري</td><td class="center">2</td><td>فير مونت غوداوري</td></tr><tr><td class="idx">3</td><td>باتومي</td><td class="center">3</td><td>ريتز كارلتون باتومي</td></tr></tbody>
+      </table>
+      
+        <div class="prices">
+          <div class="price-chip gold"><span class="plbl">مع إطلالة</span><span class="pval">$4500</span></div>
+          <div class="price-chip silver"><span class="plbl">بدون إطلالة</span><span class="pval">$4200</span></div>
+        </div>
+    </div>
+
+<div class="car-only">
+  <div class="car-only-label">🚗 عرض سيارة فقط (بدون إقامة)</div>
+  <div class="car-only-price">$1560</div>
+</div>
+
+<div class="services">
+  <h3>✅ الخدمات المشمولة</h3>
+  <ul>
+    <li>استقبال وتوديع من وإلى المطار</li>
+    <li>سيارة خاصة مع سائق طوال الرحلة</li>
+    <li>إفطار يومي في الفندق</li>
+    <li>شرائح اتصال وتأمين سفر</li>
+  </ul>
+</div>
+
+<div class="terms-section note-box">
+  <h3>📌 ملاحظات مهمة</h3>
+  <div class="t-body">الفنادق لدينا ارخص من مواقع الحجوزات ! والدفع بعد الوصول الى جورجيا نختار لأقامتك افضل الخيارات لذلك توجد أسعار اقل بخدمة او بجودة اقل ! فعالم الفخامة تحب ان يكون عمليها مرتاح في الرحلة البرنامج قابل للتغير مثلما تريد الرحلة رحلتك و نحن ننفذ . الدفع كاش بعملة الدولار الأمريكي واذا كان بالبطاقة البنكية يضاف 5% عمولة .</div>
+</div>
+
+<div class="terms-section confirm-box">
+  <h3>📋 للتأكيد فقط ارسل</h3>
+  <div class="t-body">جوازات السفر لأصدار التأمين و الحجوزات<br>تذاكر السفر موضح بها تاريخ الوصول و تاريخ المغادرة</div>
+</div>
+
+<div class="terms-section warn-box">
+  <h3>⚠️ ملاحظة مهمة جدا</h3>
+  <div class="t-body">أننا نعتز بهويتنا الأسلامية ولا نتخلى عن مبادئنا و منعنا هذه الامور التي يتم طلبها من (قلة من الاشخاص) و لانها تنافى تعاليم ديننا الاسلامى واخلاق المسلمين ، فأنها منعت منعاً باتاً ولمن يطلب هذه الامور تعتبر الرحلة ملغية: البغاء و المراقص وما شابهها و المشروبات الكحولية ، اذ كان طلبك يشابه المحرم فلا تُتَمِمَ الحجز معنا فالعوائل أولى بخدماتنا .. واذا ثبت هذه الأمور اثناء الرحلة سيتم الغاء الحجوزات و المبلغ غير مسترجع كلياً</div>
+</div>
+
+<div class="terms-section closing-box">
+  <h3>عالم الفخامة</h3>
+  <div class="t-body">أنك تتعامل مع شركة عالم الفخامة التي وظفت خبراتها اتجاه جمع المعلومة الصحيحة و الخدمة الحقيقة التي لا تجعلك تندم لأختيارك الشركة ، توكل على الله و تواصل معنا الآن</div>
+</div>
+
+<div class="footer">عالم الفخامة — LUXURY WORLD | جورجيا</div>
+
+</body>
+</html>

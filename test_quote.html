@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Tajawal',sans-serif;direction:rtl;color:#1a1a1a;background:#fff;font-size:13px;line-height:1.5}
+.header{background:linear-gradient(135deg,#002060,#0070C0);color:#fff;padding:24px 30px;text-align:center}
+.brand{font-size:26px;font-weight:800;color:#FFC000;letter-spacing:1px}
+.subtitle{font-size:14px;font-weight:500;margin-top:4px;opacity:.9}
+.summary{background:#f8f5f5;padding:16px 24px;margin:14px 18px;border-radius:8px;border-right:4px solid #C00000}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px}
+.summary-item{font-weight:500;font-size:13px}
+.summary-label{font-weight:700;color:#002060}
+.tier{margin:10px 18px;border:1px solid #ddd;border-radius:6px;overflow:hidden;page-break-inside:avoid}
+.tier-header{background:linear-gradient(90deg,#002060,#0070C0);color:#fff;padding:8px 18px;font-weight:700;font-size:14px}
+.tier-body{padding:10px 16px}
+table{width:100%;border-collapse:collapse;margin:6px 0}
+th{background:#002060;color:#fff;padding:6px 10px;text-align:right;font-weight:700;font-size:12px}
+td{padding:6px 10px;text-align:right;border-bottom:1px solid #eee;font-size:12px}
+tr:nth-child(even) td{background:#f8f8f8}
+.price-row{margin:6px 0;display:flex;align-items:center;gap:8px}
+.price-label{font-weight:700;font-size:13px;color:#333}
+.price{display:inline-block;padding:3px 14px;border-radius:4px;font-weight:800;font-size:16px;color:#002060}
+.price.gold{background:#FFC000}
+.price.silver{background:#E0E0E0}
+.car-only{background:#f0f7ff;border:2px solid #0070C0;padding:12px 18px;margin:10px 18px;border-radius:6px;text-align:center;page-break-inside:avoid}
+.car-only-label{font-weight:700;font-size:14px;color:#002060}
+.car-only-price{font-weight:800;font-size:20px;color:#002060;background:#FFC000;display:inline-block;padding:4px 18px;border-radius:4px;margin-top:6px}
+.services{background:#f0fff0;border-right:4px solid #2e7d32;padding:12px 18px;margin:10px 18px;border-radius:6px;page-break-inside:avoid}
+.services h3{color:#2e7d32;font-weight:700;font-size:14px;margin-bottom:6px}
+.services ul{list-style:none;padding:0}
+.services li{padding:2px 0;font-size:12px}
+.services li::before{content:"✅ ";margin-left:4px}
+.footer{background:#002060;color:#fff;text-align:center;padding:12px;font-size:11px;font-weight:500;margin-top:10px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">🌟 عالم الفخامة 🌟</div>
+  <div class="subtitle">LUXURY WORLD — عرض سعر رحلة جورجيا</div>
+</div>
+
+<div class="summary">
+  <div class="summary-grid">
+    <div class="summary-item"><span class="summary-label">المدة:</span> 10 أيام / 9 ليالي</div>
+    <div class="summary-item"><span class="summary-label">الغرف:</span> 1 (1 مزدوجة)</div>
+    <div class="summary-item"><span class="summary-label">المسار:</span> تبليسي ➔ باتومي ➔ كوتايسي</div>
+    <div class="summary-item"><span class="summary-label">البالغين:</span> 2 | الأطفال: لا يوجد</div>
+    <div class="summary-item"><span class="summary-label">مطار الوصول:</span> مطار تبليسي</div>
+    <div class="summary-item"><span class="summary-label">مطار المغادرة:</span> مطار تبليسي</div>
+  </div>
+</div>
+
+
+    <div class="tier">
+      <div class="tier-header">💎 العرض الأول — اقتصادي</div>
+      <div class="tier-body">
+        <table>
+          <thead><tr><th>المدينة</th><th>الليالي</th><th>الفندق</th></tr></thead>
+          <tbody><tr><td>تبليسي</td><td>4</td><td>فندق رامادا بلازا</td></tr><tr><td>باتومي</td><td>3</td><td>هيلتون باتومي</td></tr><tr><td>كوتايسي</td><td>2</td><td>بست ويسترن كوتايسي</td></tr></tbody>
+        </table>
+        
+        <div class="price-row">
+          <span class="price-label">السعر مع إطلالة:</span>
+          <span class="price gold">$2450</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">السعر بدون إطلالة:</span>
+          <span class="price silver">$2190</span>
+        </div>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-header">💎 العرض الثاني — ستاندرد</div>
+      <div class="tier-body">
+        <table>
+          <thead><tr><th>المدينة</th><th>الليالي</th><th>الفندق</th></tr></thead>
+          <tbody><tr><td>تبليسي</td><td>4</td><td>فندق شيراتون متروبول</td></tr><tr><td>باتومي</td><td>3</td><td>راديسون بلو باتومي</td></tr><tr><td>كوتايسي</td><td>2</td><td>إيبيس ستايلز كوتايسي</td></tr></tbody>
+        </table>
+        
+        <div class="price-row">
+          <span class="price-label">السعر مع إطلالة:</span>
+          <span class="price gold">$2800</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">السعر بدون إطلالة:</span>
+          <span class="price silver">$2550</span>
+        </div>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-header">💎 العرض الثالث — متوسط</div>
+      <div class="tier-body">
+        <table>
+          <thead><tr><th>المدينة</th><th>الليالي</th><th>الفندق</th></tr></thead>
+          <tbody><tr><td>تبليسي</td><td>4</td><td>ماريوت تبليسي</td></tr><tr><td>باتومي</td><td>3</td><td>شيراتون باتومي</td></tr><tr><td>كوتايسي</td><td>2</td><td>رامادا كوتايسي</td></tr></tbody>
+        </table>
+        
+        <div class="price-row">
+          <span class="price-label">السعر مع إطلالة:</span>
+          <span class="price gold">$3100</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">السعر بدون إطلالة:</span>
+          <span class="price silver">$2850</span>
+        </div>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-header">💎 العرض الرابع — ديلوكس</div>
+      <div class="tier-body">
+        <table>
+          <thead><tr><th>المدينة</th><th>الليالي</th><th>الفندق</th></tr></thead>
+          <tbody><tr><td>تبليسي</td><td>4</td><td>بولمان تبليسي</td></tr><tr><td>باتومي</td><td>3</td><td>ويندهام باتومي</td></tr><tr><td>كوتايسي</td><td>2</td><td>إنتركونتيننتال كوتايسي</td></tr></tbody>
+        </table>
+        
+        <div class="price-row">
+          <span class="price-label">السعر مع إطلالة:</span>
+          <span class="price gold">$3500</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">السعر بدون إطلالة:</span>
+          <span class="price silver">$3200</span>
+        </div>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-header">💎 العرض الخامس — فاخر</div>
+      <div class="tier-body">
+        <table>
+          <thead><tr><th>المدينة</th><th>الليالي</th><th>الفندق</th></tr></thead>
+          <tbody><tr><td>تبليسي</td><td>4</td><td>فير مونت تبليسي</td></tr><tr><td>باتومي</td><td>3</td><td>ريتز كارلتون باتومي</td></tr><tr><td>كوتايسي</td><td>2</td><td>فور سيزونز كوتايسي</td></tr></tbody>
+        </table>
+        
+        <div class="price-row">
+          <span class="price-label">السعر مع إطلالة:</span>
+          <span class="price gold">$4200</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">السعر بدون إطلالة:</span>
+          <span class="price silver">$3900</span>
+        </div>
+      </div>
+    </div>
+
+<div class="car-only">
+  <div class="car-only-label">🚗 عرض سيارة فقط (بدون إقامة)</div>
+  <div class="car-only-price">$1340</div>
+</div>
+
+<div class="services">
+  <h3>الخدمات المشمولة</h3>
+  <ul>
+    <li>استقبال وتوديع من وإلى المطار</li>
+    <li>سيارة خاصة مع سائق طوال الرحلة</li>
+    <li>إفطار يومي في الفندق</li>
+    <li>شرائح اتصال وتأمين سفر</li>
+  </ul>
+</div>
+
+<div class="footer">عالم الفخامة — LUXURY WORLD | جورجيا</div>
+
+</body>
+</html>
