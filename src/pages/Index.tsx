@@ -7,7 +7,7 @@ const Index = () => {
   const { data: hotels } = useQuery({
     queryKey: ["hotels-count"],
     queryFn: async () => {
-      const { count } = await supabase.from("hotels").select("*", { count: "exact", head: true });
+      const { count } = await supabase.from("hotel_offers").select("*", { count: "exact", head: true });
       return count ?? 0;
     },
   });

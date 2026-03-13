@@ -12,22 +12,39 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Hotel, Eye, EyeOff, Users } from "lucide-react";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
-type OfferTier = "tier_1" | "tier_2" | "tier_3" | "tier_4" | "tier_5";
+const categories = [
+  "عرض 1", "عرض 2", "عرض 3", "عرض 4", "عرض 5", "عرض 6",
+  "هنيمون 1", "هنيمون 2", "هنيمون 3", "هنيمون 4", "هنيمون 5", "هنيمون 6",
+];
 
-const tierLabels: Record<OfferTier, string> = {
-  tier_1: "العرض 1 (اقتصادي)",
-  tier_2: "العرض 2 (ستاندرد)",
-  tier_3: "العرض 3 (متوسط)",
-  tier_4: "العرض 4 (ديلوكس)",
-  tier_5: "العرض 5 (فاخر)",
+const categoryLabels: Record<string, string> = {
+  "عرض 1": "💎 العرض الأول",
+  "عرض 2": "💎 العرض الثاني",
+  "عرض 3": "💎 العرض الثالث",
+  "عرض 4": "💎 العرض الرابع",
+  "عرض 5": "💎 العرض الخامس",
+  "عرض 6": "🌟 العرض السادس",
+  "هنيمون 1": "💕 هنيمون 1",
+  "هنيمون 2": "💕 هنيمون 2",
+  "هنيمون 3": "💕 هنيمون 3",
+  "هنيمون 4": "💕 هنيمون 4",
+  "هنيمون 5": "💕 هنيمون 5",
+  "هنيمون 6": "💕 هنيمون 6 (كوخ)",
 };
 
-const tierColors: Record<OfferTier, string> = {
-  tier_1: "bg-green-100 text-green-800",
-  tier_2: "bg-blue-100 text-blue-800",
-  tier_3: "bg-yellow-100 text-yellow-800",
-  tier_4: "bg-purple-100 text-purple-800",
-  tier_5: "bg-gold/20 text-gold",
+const categoryColors: Record<string, string> = {
+  "عرض 1": "bg-green-100 text-green-800",
+  "عرض 2": "bg-blue-100 text-blue-800",
+  "عرض 3": "bg-yellow-100 text-yellow-800",
+  "عرض 4": "bg-purple-100 text-purple-800",
+  "عرض 5": "bg-orange-100 text-orange-800",
+  "عرض 6": "bg-gold/20 text-gold",
+  "هنيمون 1": "bg-pink-100 text-pink-800",
+  "هنيمون 2": "bg-pink-100 text-pink-800",
+  "هنيمون 3": "bg-pink-100 text-pink-800",
+  "هنيمون 4": "bg-pink-100 text-pink-800",
+  "هنيمون 5": "bg-pink-100 text-pink-800",
+  "هنيمون 6": "bg-rose-100 text-rose-800",
 };
 
 const HotelOffersPage = () => {
@@ -35,7 +52,7 @@ const HotelOffersPage = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<Tables<"hotel_offers"> | null>(null);
-  const [selectedTier, setSelectedTier] = useState<OfferTier>("tier_1");
+  const [selectedCategory, setSelectedCategory] = useState("عرض 1");
 
   const { data: hotelOffers, isLoading } = useQuery({
     queryKey: ["hotel-offers"],
@@ -43,7 +60,7 @@ const HotelOffersPage = () => {
       const { data, error } = await supabase
         .from("hotel_offers")
         .select("*")
-        .order("offer_tier")
+        .order("category")
         .order("city");
       if (error) throw error;
       return data;
@@ -84,7 +101,7 @@ const HotelOffersPage = () => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const offer: TablesInsert<"hotel_offers"> = {
-      offer_tier: fd.get("offer_tier") as OfferTier,
+      category: fd.get("category") as string,
       city: fd.get("city") as string,
       hotel_name: fd.get("hotel_name") as string,
       dbl_view: Number(fd.get("dbl_view")),
@@ -100,7 +117,7 @@ const HotelOffersPage = () => {
     setOpen(true);
   };
 
-  const filteredOffers = hotelOffers?.filter(o => o.offer_tier === selectedTier) ?? [];
+  const filteredOffers = hotelOffers?.filter(o => o.category === selectedCategory) ?? [];
 
   const cities = ["Tbilisi", "Batumi", "Kutaisi", "Borjomi", "Gudauri", "Bakuriani", "Dashbash"];
 
@@ -110,7 +127,7 @@ const HotelOffersPage = () => {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Hotel className="h-6 w-6" />
-            عروض الفنادق (5 مستويات)
+            عروض الفنادق (12 تصنيف)
           </h1>
           <p className="text-muted-foreground mt-1">
             إدارة أسعار الفنادق حسب المدينة ونوع الغرفة والإطلالة
@@ -127,15 +144,15 @@ const HotelOffersPage = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>مستوى العرض</Label>
+                  <Label>التصنيف</Label>
                   <select 
-                    name="offer_tier" 
-                    defaultValue={editingOffer?.offer_tier ?? "tier_1"} 
+                    name="category" 
+                    defaultValue={editingOffer?.category ?? "عرض 1"} 
                     required 
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    {Object.entries(tierLabels).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
+                    {categories.map((cat) => (
+                      <option key={cat} value={cat}>{categoryLabels[cat]}</option>
                     ))}
                   </select>
                 </div>
@@ -207,22 +224,29 @@ const HotelOffersPage = () => {
         </Dialog>
       </div>
 
-      <Tabs value={selectedTier} onValueChange={(v) => setSelectedTier(v as OfferTier)}>
-        <TabsList className="grid w-full grid-cols-5 mb-6">
-          {Object.entries(tierLabels).map(([tier, label]) => (
-            <TabsTrigger key={tier} value={tier} className="text-xs sm:text-sm">
-              {label.split(" ")[1]}
+      <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
+        <TabsList className="grid w-full grid-cols-6 mb-2">
+          {categories.slice(0, 6).map((cat) => (
+            <TabsTrigger key={cat} value={cat} className="text-xs sm:text-sm">
+              {cat}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsList className="grid w-full grid-cols-6 mb-6">
+          {categories.slice(6).map((cat) => (
+            <TabsTrigger key={cat} value={cat} className="text-xs sm:text-sm">
+              {cat}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        {Object.keys(tierLabels).map((tier) => (
-          <TabsContent key={tier} value={tier}>
+        {categories.map((cat) => (
+          <TabsContent key={cat} value={cat}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-sm ${tierColors[tier as OfferTier]}`}>
-                    {tierLabels[tier as OfferTier]}
+                  <span className={`px-3 py-1 rounded-full text-sm ${categoryColors[cat] || "bg-gray-100"}`}>
+                    {categoryLabels[cat]}
                   </span>
                 </CardTitle>
               </CardHeader>

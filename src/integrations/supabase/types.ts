@@ -352,7 +352,7 @@ export type Database = {
       hotel_offers: {
         Row: {
           id: string
-          offer_tier: Database["public"]["Enums"]["offer_tier_type"]
+          category: string
           city: string
           hotel_name: string
           dbl_view: number
@@ -365,7 +365,7 @@ export type Database = {
         }
         Insert: {
           id?: string
-          offer_tier: Database["public"]["Enums"]["offer_tier_type"]
+          category: string
           city: string
           hotel_name: string
           dbl_view?: number
@@ -378,7 +378,7 @@ export type Database = {
         }
         Update: {
           id?: string
-          offer_tier?: Database["public"]["Enums"]["offer_tier_type"]
+          category?: string
           city?: string
           hotel_name?: string
           dbl_view?: number
@@ -402,6 +402,7 @@ export type Database = {
       car_type: "sedan" | "minivan" | "van" | "sprinter"
       hotel_tier: "economy" | "standard" | "superior" | "deluxe" | "luxury"
       offer_tier_type: "tier_1" | "tier_2" | "tier_3" | "tier_4" | "tier_5"
+      hotel_category: "عرض 1" | "عرض 2" | "عرض 3" | "عرض 4" | "عرض 5" | "عرض 6" | "هنيمون 1" | "هنيمون 2" | "هنيمون 3" | "هنيمون 4" | "هنيمون 5" | "هنيمون 6"
       season_type: "high" | "low" | "mid"
     }
     CompositeTypes: {
